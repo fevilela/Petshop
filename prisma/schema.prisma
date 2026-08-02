@@ -1,0 +1,398 @@
+// Schema do CRM do Petshop/Hotelzinho
+// Documentação de decisões de modelagem: ver README.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  ADMIN
+  ATENDENTE
+}
+
+enum PorteAnimal {
+  PEQUENO
+  MEDIO
+  GRANDE
+}
+
+enum StatusCanil {
+  LIVRE
+  OCUPADO
+  MANUTENCAO
+}
+
+enum StatusAgendamento {
+  AGENDADO
+  CONFIRMADO
+  EM_ANDAMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum TipoItemVenda {
+  PRODUTO
+  SERVICO
+}
+
+enum FormaPagamento {
+  DINHEIRO
+  PIX_MANUAL
+  CARTAO_MANUAL
+  BOLETO
+  PIX_MERCADOPAGO
+  CARTAO_LINK
+  MENSALISTA
+}
+
+enum StatusVenda {
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusAssinatura {
+  ATIVA
+  PAUSADA
+  CANCELADA
+}
+
+enum TipoCobranca {
+  BOLETO
+  PIX
+  CARTAO_LINK
+}
+
+enum StatusCobranca {
+  PENDENTE
+  PAGO
+  VENCIDO
+  CANCELADO
+}
+
+enum StatusConta {
+  PENDENTE
+  PAGO
+  VENCIDO
+  CANCELADO
+}
+
+enum StatusWhatsapp {
+  PENDENTE
+  ENVIADO
+  FALHA
+}
+
+// ---------- Modelos ----------
+
+model Usuario {
+  id         String   @id @default(cuid())
+  nome       String
+  email      String   @unique
+  senhaHash  String
+  role       Role     @default(ATENDENTE)
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  vendas     Venda[]
+}
+
+model Cliente {
+  id            String   @id @default(cuid())
+  nome          String
+  documento     String?  // CPF ou CNPJ
+  telefone      String   // WhatsApp, formato E.164 ex: 5511999998888
+  email         String?
+  endereco      String?
+  observacoes   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  animais       Animal[]
+  vendas        Venda[]
+  assinaturas   Assinatura[]
+  agendamentos  Agendamento[]
+  contasReceber ContaReceber[]
+  whatsappMsgs  WhatsappMensagem[]
+
+  @@index([nome])
+  @@index([telefone])
+}
+
+model Animal {
+  id             String       @id @default(cuid())
+  nome           String
+  clienteId      String
+  cliente        Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  especie        String       // Cão, Gato, etc.
+  raca           String?
+  porte          PorteAnimal?
+  dataNascimento DateTime?
+  pesoKg         Decimal?     @db.Decimal(6, 2)
+  observacoes    String?      // alergias, restrições, temperamento
+  ativo          Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  agendamentos   Agendamento[]
+  itensVenda     ItemVenda[]
+  hospedagens    Hospedagem[]
+
+  @@index([clienteId])
+}
+
+model Canil {
+  id             String       @id @default(cuid())
+  identificador  String       @unique // ex: "Canil 01"
+  tipoPorte      PorteAnimal?
+  capacidade     Int          @default(1)
+  status         StatusCanil  @default(LIVRE)
+  observacoes    String?
+
+  hospedagens    Hospedagem[]
+  agendamentos   Agendamento[]
+}
+
+model Hospedagem {
+  id               String    @id @default(cuid())
+  canilId          String
+  canil            Canil     @relation(fields: [canilId], references: [id])
+  animalId         String
+  animal           Animal    @relation(fields: [animalId], references: [id])
+  checkIn          DateTime
+  checkOutPrevisto DateTime?
+  checkOut         DateTime?
+  valorDiaria      Decimal?  @db.Decimal(10, 2)
+  observacoes      String?
+  createdAt        DateTime  @default(now())
+
+  @@index([canilId])
+  @@index([animalId])
+}
+
+model Produto {
+  id         String      @id @default(cuid())
+  nome       String
+  categoria  String?
+  descricao  String?
+  preco      Decimal     @db.Decimal(10, 2)
+  estoque    Int         @default(0)
+  sku        String?     @unique
+  ativo      Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+
+  itensVenda ItemVenda[]
+  planoItens PlanoItem[]
+}
+
+model Servico {
+  id             String        @id @default(cuid())
+  nome           String
+  categoria      String?       // Banho, Tosa, Consulta, Hospedagem/diária...
+  descricao      String?
+  preco          Decimal       @db.Decimal(10, 2)
+  duracaoMinutos Int?
+  ativo          Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+
+  itensVenda     ItemVenda[]
+  planoItens     PlanoItem[]
+  agendamentos   Agendamento[]
+}
+
+// Modelo (template) de plano mensal reutilizável, ex: "Banho Mensal 4x"
+model Plano {
+  id                String       @id @default(cuid())
+  nome              String
+  descricao         String?
+  valorMensal       Decimal      @db.Decimal(10, 2)
+  diaCobrancaPadrao Int          @default(5)
+  ativo             Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+
+  itens             PlanoItem[]
+  assinaturas       Assinatura[]
+}
+
+// Itens inclusos em um plano (quantidade mensal de cada produto/serviço)
+model PlanoItem {
+  id         String   @id @default(cuid())
+  planoId    String
+  plano      Plano    @relation(fields: [planoId], references: [id], onDelete: Cascade)
+  produtoId  String?
+  produto    Produto? @relation(fields: [produtoId], references: [id])
+  servicoId  String?
+  servico    Servico? @relation(fields: [servicoId], references: [id])
+  quantidade Int      @default(1) // quantas vezes por mês está incluso
+
+  @@index([planoId])
+}
+
+// Assinatura de um cliente a um plano (o que torna o cliente "mensalista")
+model Assinatura {
+  id            String           @id @default(cuid())
+  clienteId     String
+  cliente       Cliente          @relation(fields: [clienteId], references: [id])
+  planoId       String
+  plano         Plano            @relation(fields: [planoId], references: [id])
+  valorMensal   Decimal          @db.Decimal(10, 2) // copiado do plano na criação, pode ser customizado
+  diaCobranca   Int
+  status        StatusAssinatura @default(ATIVA)
+  dataInicio    DateTime         @default(now())
+  dataFim       DateTime?
+  createdAt     DateTime         @default(now())
+
+  cobrancas     Cobranca[]
+  vendas        Venda[]
+
+  @@index([clienteId])
+  @@index([status])
+}
+
+model Venda {
+  id              String         @id @default(cuid())
+  numero          Int            @unique @default(autoincrement())
+  clienteId       String
+  cliente         Cliente        @relation(fields: [clienteId], references: [id])
+  animalId        String?
+  animal          Animal?        @relation(fields: [animalId], references: [id])
+  assinaturaId    String?        // preenchido quando debitado de uma mensalidade
+  assinatura      Assinatura?    @relation(fields: [assinaturaId], references: [id])
+  formaPagamento  FormaPagamento
+  valorTotal      Decimal        @db.Decimal(10, 2)
+  status          StatusVenda    @default(CONCLUIDA)
+  observacoes     String?
+  criadoPorId     String?
+  criadoPor       Usuario?       @relation(fields: [criadoPorId], references: [id])
+  createdAt       DateTime       @default(now())
+
+  itens           ItemVenda[]
+  cobranca        Cobranca?
+
+  @@index([clienteId])
+  @@index([createdAt])
+}
+
+model ItemVenda {
+  id            String        @id @default(cuid())
+  vendaId       String
+  venda         Venda         @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  tipo          TipoItemVenda
+  produtoId     String?
+  produto       Produto?      @relation(fields: [produtoId], references: [id])
+  servicoId     String?
+  servico       Servico?      @relation(fields: [servicoId], references: [id])
+  animalId      String?       // qual animal recebeu o serviço, se aplicável
+  animal        Animal?       @relation(fields: [animalId], references: [id])
+  quantidade    Int           @default(1)
+  precoUnitario Decimal       @db.Decimal(10, 2)
+  subtotal      Decimal       @db.Decimal(10, 2)
+
+  @@index([vendaId])
+}
+
+// Cobrança gerada via Mercado Pago (boleto / pix / link de cartão),
+// vinculada a uma Venda avulsa OU a uma mensalidade de Assinatura.
+model Cobranca {
+  id               String         @id @default(cuid())
+  tipo             TipoCobranca
+  status           StatusCobranca @default(PENDENTE)
+  valor            Decimal        @db.Decimal(10, 2)
+  vendaId          String?        @unique
+  venda            Venda?         @relation(fields: [vendaId], references: [id])
+  assinaturaId     String?
+  assinatura       Assinatura?    @relation(fields: [assinaturaId], references: [id])
+  referenciaMes    String?        // ex: "2026-08", usado para mensalidades
+  mercadoPagoId    String?
+  linkPagamento    String?
+  qrCode           String?        // payload "copia e cola" do Pix
+  qrCodeBase64     String?
+  linhaDigitavel   String?        // boleto
+  dataVencimento   DateTime
+  dataPagamento    DateTime?
+  enviadoWhatsappEm DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  whatsappMsgs     WhatsappMensagem[]
+
+  @@index([status])
+  @@index([assinaturaId])
+}
+
+model ContaPagar {
+  id             String      @id @default(cuid())
+  descricao      String
+  fornecedor     String?
+  categoria      String?
+  valor          Decimal     @db.Decimal(10, 2)
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  status         StatusConta @default(PENDENTE)
+  observacoes    String?
+  createdAt      DateTime    @default(now())
+
+  @@index([status])
+  @@index([dataVencimento])
+}
+
+// Recebíveis fora do fluxo padrão de Venda/Cobrança (ex: acordo avulso, reembolso).
+// Cobranças de vendas/mensalidades já aparecem no financeiro através do modelo Cobranca.
+model ContaReceber {
+  id              String      @id @default(cuid())
+  descricao       String
+  clienteId       String?
+  cliente         Cliente?    @relation(fields: [clienteId], references: [id])
+  valor           Decimal     @db.Decimal(10, 2)
+  dataVencimento  DateTime
+  dataRecebimento DateTime?
+  status          StatusConta @default(PENDENTE)
+  observacoes     String?
+  createdAt       DateTime    @default(now())
+
+  @@index([status])
+  @@index([dataVencimento])
+}
+
+model Agendamento {
+  id             String            @id @default(cuid())
+  clienteId      String
+  cliente        Cliente           @relation(fields: [clienteId], references: [id])
+  animalId       String
+  animal         Animal            @relation(fields: [animalId], references: [id])
+  servicoId      String?
+  servico        Servico?          @relation(fields: [servicoId], references: [id])
+  canilId        String?
+  canil          Canil?            @relation(fields: [canilId], references: [id])
+  dataHoraInicio DateTime
+  dataHoraFim    DateTime?
+  status         StatusAgendamento @default(AGENDADO)
+  observacoes    String?
+  createdAt      DateTime          @default(now())
+
+  @@index([dataHoraInicio])
+  @@index([status])
+}
+
+// Log de mensagens enviadas via WhatsApp (cobranças, lembretes, etc.)
+model WhatsappMensagem {
+  id          String          @id @default(cuid())
+  clienteId   String
+  cliente     Cliente         @relation(fields: [clienteId], references: [id])
+  cobrancaId  String?
+  cobranca    Cobranca?       @relation(fields: [cobrancaId], references: [id])
+  telefone    String
+  tipo        String          // cobranca_boleto, cobranca_pix, lembrete_agendamento...
+  status      StatusWhatsapp  @default(PENDENTE)
+  mensagemId  String?         // id retornado pela Meta Cloud API
+  erro        String?
+  createdAt   DateTime        @default(now())
+
+  @@index([clienteId])
+  @@index([status])
+}
