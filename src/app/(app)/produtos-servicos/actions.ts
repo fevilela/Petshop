@@ -26,10 +26,10 @@ function parseProduto(formData: FormData) {
 }
 
 export async function createProduto(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseProduto(formData);
   await prisma.produto.create({
-    data: { ...data, preco: Number(data.preco), estoque: data.estoque ? Number(data.estoque) : 0, sku: data.sku || undefined },
+    data: { ...data, empresaId, preco: Number(data.preco), estoque: data.estoque ? Number(data.estoque) : 0, sku: data.sku || undefined },
   });
   revalidatePath("/produtos-servicos");
   redirect("/produtos-servicos");
@@ -71,10 +71,10 @@ function parseServico(formData: FormData) {
 }
 
 export async function createServico(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseServico(formData);
   await prisma.servico.create({
-    data: { ...data, preco: Number(data.preco), duracaoMinutos: data.duracaoMinutos ? Number(data.duracaoMinutos) : undefined },
+    data: { ...data, empresaId, preco: Number(data.preco), duracaoMinutos: data.duracaoMinutos ? Number(data.duracaoMinutos) : undefined },
   });
   revalidatePath("/produtos-servicos");
   redirect("/produtos-servicos");

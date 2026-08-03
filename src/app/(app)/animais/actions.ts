@@ -30,7 +30,7 @@ function parseForm(formData: FormData) {
 }
 
 export async function createAnimal(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   // Garante que o tutor pertence a esta empresa (ver nota de segurança em
@@ -39,6 +39,7 @@ export async function createAnimal(formData: FormData) {
 
   await prisma.animal.create({
     data: {
+      empresaId,
       nome: data.nome,
       clienteId: data.clienteId,
       especie: data.especie,

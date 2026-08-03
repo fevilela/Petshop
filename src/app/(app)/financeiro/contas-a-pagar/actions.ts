@@ -26,10 +26,10 @@ function parseForm(formData: FormData) {
 }
 
 export async function createContaPagar(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.contaPagar.create({
-    data: { ...data, valor: Number(data.valor), dataVencimento: new Date(data.dataVencimento) },
+    data: { ...data, empresaId, valor: Number(data.valor), dataVencimento: new Date(data.dataVencimento) },
   });
   revalidatePath("/financeiro/contas-a-pagar");
   redirect("/financeiro/contas-a-pagar");

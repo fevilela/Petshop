@@ -24,10 +24,10 @@ function parseForm(formData: FormData) {
 }
 
 export async function createCanil(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.canil.create({
-    data: { ...data, capacidade: data.capacidade ? Number(data.capacidade) : 1 },
+    data: { ...data, empresaId, capacidade: data.capacidade ? Number(data.capacidade) : 1 },
   });
   revalidatePath("/canil");
   redirect("/canil");
@@ -60,7 +60,7 @@ const hospedagemSchema = z.object({
 });
 
 export async function createHospedagem(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = hospedagemSchema.parse({
     canilId: formData.get("canilId"),
     animalId: formData.get("animalId"),
@@ -80,6 +80,7 @@ export async function createHospedagem(formData: FormData) {
   await prisma.$transaction([
     prisma.hospedagem.create({
       data: {
+        empresaId,
         canilId: data.canilId,
         animalId: data.animalId,
         checkIn: new Date(data.checkIn),

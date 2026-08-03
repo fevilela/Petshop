@@ -22,10 +22,11 @@ function parsePlano(formData: FormData) {
 }
 
 export async function createPlano(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parsePlano(formData);
   const plano = await prisma.plano.create({
     data: {
+      empresaId,
       nome: data.nome,
       descricao: data.descricao,
       valorMensal: Number(data.valorMensal),
@@ -66,7 +67,7 @@ const planoItemSchema = z.object({
 });
 
 export async function addPlanoItem(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = planoItemSchema.parse({
     planoId: formData.get("planoId"),
     tipo: formData.get("tipo"),
@@ -85,6 +86,7 @@ export async function addPlanoItem(formData: FormData) {
 
   await prisma.planoItem.create({
     data: {
+      empresaId,
       planoId: data.planoId,
       produtoId: data.tipo === "PRODUTO" ? data.itemId : undefined,
       servicoId: data.tipo === "SERVICO" ? data.itemId : undefined,
@@ -109,7 +111,7 @@ const assinaturaSchema = z.object({
 });
 
 export async function createAssinatura(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = assinaturaSchema.parse({
     planoId: formData.get("planoId"),
     clienteId: formData.get("clienteId"),
@@ -122,6 +124,7 @@ export async function createAssinatura(formData: FormData) {
 
   await prisma.assinatura.create({
     data: {
+      empresaId,
       planoId: data.planoId,
       clienteId: data.clienteId,
       diaCobranca: data.diaCobranca ? Number(data.diaCobranca) : plano.diaCobrancaPadrao,

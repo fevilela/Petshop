@@ -27,11 +27,15 @@ function parseForm(formData: FormData) {
 }
 
 export async function createCliente(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
+  // empresaId é passado explicitamente (mesmo o Client Extension já
+  // injetando em runtime) porque o TIPO gerado pelo Prisma para `create`
+  // exige o campo obrigatório do schema — a extension só relaxa isso em
+  // runtime, não no tipo estático que o TypeScript checa no build.
   await prisma.cliente.create({
-    data: { ...data, telefone: normalizePhoneE164(data.telefone) },
+    data: { ...data, empresaId, telefone: normalizePhoneE164(data.telefone) },
   });
 
   revalidatePath("/clientes");

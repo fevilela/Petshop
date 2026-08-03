@@ -149,6 +149,7 @@ export async function createVenda(formData: FormData) {
 
     const cobranca = await prisma.cobranca.create({
       data: {
+        empresaId,
         tipo:
           parsed.formaPagamento === "BOLETO"
             ? "BOLETO"
@@ -261,6 +262,7 @@ export async function enviarCobrancaWhatsapp(cobrancaId: string) {
     await prisma.$transaction([
       prisma.whatsappMensagem.create({
         data: {
+          empresaId,
           clienteId: cliente.id,
           cobrancaId: cobranca.id,
           telefone,
@@ -274,6 +276,7 @@ export async function enviarCobrancaWhatsapp(cobrancaId: string) {
   } catch (err) {
     await prisma.whatsappMensagem.create({
       data: {
+        empresaId,
         clienteId: cliente.id,
         cobrancaId: cobranca.id,
         telefone,

@@ -16,7 +16,7 @@ const agendamentoSchema = z.object({
 });
 
 export async function createAgendamento(formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = agendamentoSchema.parse({
     clienteId: formData.get("clienteId"),
     animalId: formData.get("animalId"),
@@ -36,6 +36,7 @@ export async function createAgendamento(formData: FormData) {
 
   await prisma.agendamento.create({
     data: {
+      empresaId,
       clienteId: data.clienteId,
       animalId: data.animalId,
       servicoId: data.servicoId,
