@@ -1,3 +1,5 @@
+import { formatCurrency } from "@/lib/utils";
+
 /** Labels/badges compartilhados entre a listagem e o detalhe de vendas. */
 
 export const FORMA_LABEL: Record<string, string> = {
@@ -22,3 +24,20 @@ export const TIPO_COBRANCA_LABEL: Record<string, string> = {
   PIX: "Pix",
   CARTAO_LINK: "Link de pagamento",
 };
+
+/**
+ * Texto padrão pra mandar a cobrança pelo link direto do WhatsApp (wa.me).
+ * Mesmo teor da mensagem do template "cobranca_disponivel" usado no envio
+ * automático via Cloud API, só que como texto livre (o wa.me não usa
+ * template — é só um rascunho pro atendente revisar e enviar).
+ */
+export function mensagemCobrancaWhatsapp(params: {
+  clienteNome: string;
+  valor: number;
+  tipo: string;
+  linkOuCodigo?: string | null;
+}): string {
+  const tipoLabel = TIPO_COBRANCA_LABEL[params.tipo] ?? params.tipo;
+  const base = `Olá ${params.clienteNome}, sua cobrança de ${formatCurrency(params.valor)} (${tipoLabel}) está disponível.`;
+  return params.linkOuCodigo ? `${base}\n\n${params.linkOuCodigo}` : base;
+}

@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
 import CopyButton from "@/components/CopyButton";
-import { FORMA_LABEL, COBRANCA_BADGE, TIPO_COBRANCA_LABEL } from "../labels";
+import { FORMA_LABEL, COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "../labels";
 import { marcarCobrancaPaga, enviarCobrancaWhatsapp, verificarPagamentoAction } from "../actions";
 
 /** Formas de pagamento que deveriam ter gerado uma Cobrança via Mercado Pago. */
@@ -216,8 +216,24 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
                     <button type="submit" className="btn-secondary text-sm">Verificar pagamento agora</button>
                   </form>
                 )}
+                <a
+                  href={linkWhatsapp(
+                    venda.cliente.telefone,
+                    mensagemCobrancaWhatsapp({
+                      clienteNome: venda.cliente.nome,
+                      valor: Number(cobranca.valor),
+                      tipo: cobranca.tipo,
+                      linkOuCodigo: cobranca.linkPagamento || cobranca.qrCode,
+                    })
+                  )}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary text-sm"
+                >
+                  Abrir no WhatsApp
+                </a>
                 <form action={enviarCobrancaWhatsapp.bind(null, cobranca.id)}>
-                  <button type="submit" className="btn-secondary text-sm">Enviar WhatsApp</button>
+                  <button type="submit" className="btn-secondary text-sm">Enviar automático (Cloud API)</button>
                 </form>
               </div>
             )}

@@ -20,6 +20,17 @@ export function normalizePhoneE164(raw: string): string {
   return `55${digits}`;
 }
 
+/**
+ * Link "wa.me" — abre o WhatsApp (app ou web) com a mensagem pré-preenchida,
+ * pra um humano clicar em enviar. Não depende de nenhuma credencial/API
+ * configurada: funciona mesmo pro petshop que não passou pela aprovação da
+ * Meta ainda. Complementa (não substitui) o envio automático via Cloud API.
+ */
+export function linkWhatsapp(telefoneRaw: string, mensagem: string): string {
+  const telefone = normalizePhoneE164(telefoneRaw);
+  return `https://wa.me/${telefone}?text=${encodeURIComponent(mensagem)}`;
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
