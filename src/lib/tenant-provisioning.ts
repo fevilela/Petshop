@@ -53,13 +53,22 @@ export async function criarEmpresaEIniciarProvisionamento(input: CadastrarEmpres
   return empresa;
 }
 
-/** Gera um novo convite (token de 48h) para um usuário e envia por e-mail. */
+/**
+ * Gera um novo convite (token de 48h) para um usuário e tenta enviar por
+ * e-mail. O convite em si (linha no banco + token) já é o que realmente
+ * importa para o usuário conseguir logar depois — uma falha no envio do
+ * e-mail (Resend fora do ar, RESEND_API_KEY ausente, domínio não
+ * verificado, etc.) NÃO deve derrubar a criação do usuário/empresa que
+ * disparou este convite. Por isso o erro é logado, não relançado; o admin
+ * pode tentar de novo pelo botão "Reenviar convite" assim que a causa for
+ * corrigida.
+ */
 export async function criarConviteEEnviarEmail(
   usuarioId: string,
   empresaId: string | null,
   nomeEmpresa: string,
   email: string
-) {
+): Promise<{ emailEnviado: boolean }> {
   const token = gerarToken();
   const expiraEm = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
@@ -70,11 +79,17 @@ export async function criarConviteEEnviarEmail(
   const appUrl = process.env.APP_URL || "http://localhost:3000";
   const linkConvite = `${appUrl}/convite/${token}`;
 
-  await enviarEmail({
-    to: email,
-    subject: "Seu acesso ao Petshop CRM",
-    html: templateConviteHtml({ nomeEmpresa, linkConvite }),
-  });
+  try {
+    await enviarEmail({
+      to: email,
+      subject: "Seu acesso ao Petshop CRM",
+      html: templateConviteHtml({ nomeEmpresa, linkConvite }),
+    });
+    return { emailEnviado: true };
+  } catch (err) {
+    console.error(`[convite] Falha ao enviar e-mail de convite para ${email}:`, err);
+    return { emailEnviado: false };
+  }
 }
 
 /** Cria um usuário adicional (atendente) para uma empresa já ativa, e o convida. */
