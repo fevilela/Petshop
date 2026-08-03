@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { normalizePhoneE164 } from "@/lib/utils";
 
 const clienteSchema = z.object({
@@ -27,6 +27,7 @@ function parseForm(formData: FormData) {
 }
 
 export async function createCliente(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   await prisma.cliente.create({
@@ -38,6 +39,7 @@ export async function createCliente(formData: FormData) {
 }
 
 export async function updateCliente(id: string, formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   await prisma.cliente.update({
@@ -50,6 +52,7 @@ export async function updateCliente(id: string, formData: FormData) {
 }
 
 export async function deleteCliente(id: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.cliente.delete({ where: { id } });
   revalidatePath("/clientes");
 }

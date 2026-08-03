@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import CanilForm from "@/components/CanilForm";
 import { updateCanil } from "../../actions";
 
 export default async function EditarCanilPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const canil = await prisma.canil.findUnique({ where: { id: params.id } });
   if (!canil) notFound();
   return (

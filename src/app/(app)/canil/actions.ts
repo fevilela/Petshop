@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 
 const canilSchema = z.object({
   identificador: z.string().min(1, "Informe um identificador (ex: Canil 01)"),
@@ -24,6 +24,7 @@ function parseForm(formData: FormData) {
 }
 
 export async function createCanil(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.canil.create({
     data: { ...data, capacidade: data.capacidade ? Number(data.capacidade) : 1 },
@@ -33,6 +34,7 @@ export async function createCanil(formData: FormData) {
 }
 
 export async function updateCanil(id: string, formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.canil.update({
     where: { id },
@@ -43,6 +45,7 @@ export async function updateCanil(id: string, formData: FormData) {
 }
 
 export async function deleteCanil(id: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.canil.delete({ where: { id } });
   revalidatePath("/canil");
 }
@@ -57,6 +60,7 @@ const hospedagemSchema = z.object({
 });
 
 export async function createHospedagem(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = hospedagemSchema.parse({
     canilId: formData.get("canilId"),
     animalId: formData.get("animalId"),
@@ -86,6 +90,7 @@ export async function createHospedagem(formData: FormData) {
 }
 
 export async function finalizarHospedagem(hospedagemId: string, canilId: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.$transaction([
     prisma.hospedagem.update({ where: { id: hospedagemId }, data: { checkOut: new Date() } }),
     prisma.canil.update({ where: { id: canilId }, data: { status: "LIVRE" } }),

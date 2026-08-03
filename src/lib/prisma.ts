@@ -1,12 +1,14 @@
-import { PrismaClient } from "@prisma/client";
-
-// Evita múltiplas instâncias do Prisma Client em dev (hot reload do Next.js)
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
-
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
-  });
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// ARQUIVO DESATIVADO: esta aplicação virou multi-tenant (um banco por
+// petshop-cliente), então não existe mais "o" client fixo do Prisma.
+//
+// Use, em vez disso:
+//   - `@/lib/control-prisma` (controlPrisma) para dados da plataforma
+//     (empresas, usuários, convites).
+//   - `@/lib/session-tenant` (getSessionTenantPrisma) dentro de
+//     pages/Server Actions que mexem em dados operacionais do petshop
+//     logado (clientes, animais, vendas, agenda, financeiro...).
+//
+// Este arquivo não deveria ter mais nenhum import — se o build reclamar de
+// algum lugar ainda importando `@/lib/prisma`, é sinal de refatoração
+// incompleta (ver README.md, seção "Arquitetura multi-tenant").
+export {};

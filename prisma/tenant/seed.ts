@@ -1,22 +1,11 @@
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
+import { PrismaClient } from "../../src/generated/tenant-client";
 
 const prisma = new PrismaClient();
 
+// Este seed popula um banco DE UMA EMPRESA (tenant) com dados de exemplo.
+// O usuário de login não existe mais aqui — ele vive no banco de controle
+// (ver prisma/control/seed.ts), já que login agora é multi-tenant.
 async function main() {
-  const senhaHash = await bcrypt.hash("petshop123", 10);
-
-  const admin = await prisma.usuario.upsert({
-    where: { email: "admin@petshop.local" },
-    update: {},
-    create: {
-      nome: "Administrador",
-      email: "admin@petshop.local",
-      senhaHash,
-      role: "ADMIN",
-    },
-  });
-
   const cliente = await prisma.cliente.upsert({
     where: { id: "seed-cliente-1" },
     update: {},
@@ -84,8 +73,7 @@ async function main() {
     },
   });
 
-  console.log("Seed concluído.");
-  console.log(`Login: ${admin.email} / senha: petshop123`);
+  console.log("Seed do tenant concluído.");
   console.log(`Cliente de exemplo: ${cliente.nome} (${animal.nome})`);
 }
 

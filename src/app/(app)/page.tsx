@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import Link from "next/link";
 
 export default async function DashboardPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const inicioMes = new Date();
   inicioMes.setDate(1);
   inicioMes.setHours(0, 0, 0, 0);

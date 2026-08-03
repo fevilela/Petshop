@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ContaForm from "@/components/ContaForm";
 import { createContaReceber } from "../actions";
 
 export default async function NovaContaReceberPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const clientes = await prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } });
   return (
     <div className="space-y-4">

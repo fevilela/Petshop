@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { updatePlano } from "../../actions";
 
 export default async function EditarPlanoPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const plano = await prisma.plano.findUnique({ where: { id: params.id } });
   if (!plano) notFound();
 

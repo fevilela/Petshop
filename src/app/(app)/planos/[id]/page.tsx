@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import DeleteButton from "@/components/DeleteButton";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../actions";
 
 export default async function PlanoDetalhePage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const [plano, produtos, servicos, clientes] = await Promise.all([
     prisma.plano.findUnique({
       where: { id: params.id },

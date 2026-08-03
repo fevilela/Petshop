@@ -1,8 +1,10 @@
 /**
  * Integração com a WhatsApp Cloud API (Meta) — Fase 2.
  *
- * Requer no .env: WHATSAPP_PHONE_NUMBER_ID e WHATSAPP_ACCESS_TOKEN
- * (obtidos em https://developers.facebook.com/apps > seu app > WhatsApp > API Setup).
+ * Multi-tenant: cada petshop-cliente usa o PRÓPRIO número/API do WhatsApp
+ * Business (configurado em /configuracoes, guardado na Empresa). Por isso
+ * toda função aqui recebe as credenciais como parâmetro — quem chama busca
+ * e descriptografa as credenciais da empresa certa antes.
  *
  * IMPORTANTE (regra da Meta): para iniciar uma conversa com o cliente
  * (ex: enviar um boleto sem que ele tenha mandado mensagem antes nas
@@ -14,24 +16,18 @@
 
 const GRAPH_API_VERSION = "v20.0";
 
-function getConfig() {
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-  if (!phoneNumberId || !accessToken) {
-    throw new Error(
-      "WHATSAPP_PHONE_NUMBER_ID / WHATSAPP_ACCESS_TOKEN não configurados. Defina no .env para habilitar envio (Fase 2)."
-    );
-  }
-  return { phoneNumberId, accessToken };
-}
+export type WhatsappCredenciais = {
+  phoneNumberId: string;
+  accessToken: string;
+};
 
-async function callGraphApi(phoneNumberId: string, accessToken: string, body: unknown) {
+async function callGraphApi(creds: WhatsappCredenciais, body: unknown) {
   const res = await fetch(
-    `https://graph.facebook.com/${GRAPH_API_VERSION}/${phoneNumberId}/messages`,
+    `https://graph.facebook.com/${GRAPH_API_VERSION}/${creds.phoneNumberId}/messages`,
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${creds.accessToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
@@ -52,13 +48,13 @@ async function callGraphApi(phoneNumberId: string, accessToken: string, body: un
  *   corpo: "Olá {{1}}, sua cobrança de {{2}} referente a {{3}} está disponível: {{4}}"
  */
 export async function sendTemplateMessage(
+  creds: WhatsappCredenciais,
   telefoneE164: string,
   templateName: string,
   languageCode: string,
   parametros: string[]
 ) {
-  const { phoneNumberId, accessToken } = getConfig();
-  return callGraphApi(phoneNumberId, accessToken, {
+  return callGraphApi(creds, {
     messaging_product: "whatsapp",
     to: telefoneE164,
     type: "template",
@@ -76,9 +72,8 @@ export async function sendTemplateMessage(
 }
 
 /** Mensagem de texto livre — só entrega se o cliente já escreveu nas últimas 24h. */
-export async function sendTextMessage(telefoneE164: string, texto: string) {
-  const { phoneNumberId, accessToken } = getConfig();
-  return callGraphApi(phoneNumberId, accessToken, {
+export async function sendTextMessage(creds: WhatsappCredenciais, telefoneE164: string, texto: string) {
+  return callGraphApi(creds, {
     messaging_product: "whatsapp",
     to: telefoneE164,
     type: "text",
@@ -87,9 +82,13 @@ export async function sendTextMessage(telefoneE164: string, texto: string) {
 }
 
 /** Envia um QR Code (imagem) por WhatsApp — usado para cobranças Pix. */
-export async function sendImageMessage(telefoneE164: string, imageUrl: string, caption?: string) {
-  const { phoneNumberId, accessToken } = getConfig();
-  return callGraphApi(phoneNumberId, accessToken, {
+export async function sendImageMessage(
+  creds: WhatsappCredenciais,
+  telefoneE164: string,
+  imageUrl: string,
+  caption?: string
+) {
+  return callGraphApi(creds, {
     messaging_product: "whatsapp",
     to: telefoneE164,
     type: "image",

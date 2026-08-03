@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ContaForm from "@/components/ContaForm";
 import { updateContaReceber } from "../../actions";
 
 export default async function EditarContaReceberPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const [conta, clientes] = await Promise.all([
     prisma.contaReceber.findUnique({ where: { id: params.id } }),
     prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),

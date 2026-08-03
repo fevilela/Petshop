@@ -1,0 +1,92 @@
+// Schema do BANCO DE CONTROLE (control-plane) — único, pertence à Fernanda (dona do SaaS).
+// Guarda as empresas (petshops-clientes), usuários/login e convites.
+// Os dados operacionais de cada petshop (clientes, animais, vendas...) ficam em
+// bancos separados, um por empresa — ver prisma/tenant/schema.prisma.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/control-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_DATABASE_URL")
+}
+
+enum StatusEmpresa {
+  PROVISIONANDO
+  ATIVA
+  ERRO_PROVISIONAMENTO
+  SUSPENSA
+}
+
+enum RoleUsuario {
+  SUPER_ADMIN
+  EMPRESA_ADMIN
+  EMPRESA_ATENDENTE
+}
+
+// Um petshop-cliente que assina o SaaS. Cada Empresa tem seu próprio banco
+// Postgres (provisionado via Supabase Management API) e suas próprias
+// credenciais de Mercado Pago / WhatsApp — nunca compartilhadas entre empresas.
+model Empresa {
+  id                        String        @id @default(cuid())
+  nome                      String
+  documento                 String?       // CNPJ do petshop-cliente
+  emailResponsavel          String
+  status                    StatusEmpresa @default(PROVISIONANDO)
+
+  // Dados do provisionamento do banco (Supabase Management API)
+  supabaseProjectRef        String?
+  supabaseProjectRegion     String?
+  databaseUrlEnc            String?       // connection string (pooler, IPv4) — criptografada, uso em runtime
+  databaseUrlDiretaEnc      String?       // connection string direta (IPv6) — criptografada, uso p/ migrations
+  provisionamentoErro       String?
+
+  // Credenciais próprias do petshop (Fase 2 — cobrança e WhatsApp)
+  mercadoPagoAccessTokenEnc String?
+  whatsappPhoneNumberId     String?
+  whatsappBusinessAccountId String?
+  whatsappAccessTokenEnc    String?
+
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  usuarios                  Usuario[]
+  convites                  ConviteUsuario[]
+
+  @@index([status])
+}
+
+// Login da plataforma. SUPER_ADMIN (a Fernanda) não pertence a nenhuma Empresa
+// (empresaId nulo); EMPRESA_ADMIN/EMPRESA_ATENDENTE pertencem a uma Empresa.
+model Usuario {
+  id         String      @id @default(cuid())
+  nome       String
+  email      String      @unique
+  senhaHash  String?     // nulo até o convite ser aceito e a senha definida
+  role       RoleUsuario
+  empresaId  String?
+  empresa    Empresa?    @relation(fields: [empresaId], references: [id])
+  ativo      Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+
+  convites   ConviteUsuario[]
+
+  @@index([empresaId])
+}
+
+// Token de convite para o usuário definir a própria senha pela primeira vez.
+model ConviteUsuario {
+  id        String    @id @default(cuid())
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresaId String?
+  empresa   Empresa?  @relation(fields: [empresaId], references: [id])
+  token     String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+}

@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency } from "@/lib/utils";
 import ToggleAtivoButton from "@/components/ToggleAtivoButton";
 import { toggleProdutoAtivo, toggleServicoAtivo } from "./actions";
 
 export default async function ProdutosServicosPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const [produtos, servicos] = await Promise.all([
     prisma.produto.findMany({ orderBy: { nome: "asc" } }),
     prisma.servico.findMany({ orderBy: { nome: "asc" } }),

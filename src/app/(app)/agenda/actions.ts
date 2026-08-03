@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 
 const agendamentoSchema = z.object({
   clienteId: z.string().min(1, "Selecione o cliente"),
@@ -16,6 +16,7 @@ const agendamentoSchema = z.object({
 });
 
 export async function createAgendamento(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = agendamentoSchema.parse({
     clienteId: formData.get("clienteId"),
     animalId: formData.get("animalId"),
@@ -43,6 +44,7 @@ export async function createAgendamento(formData: FormData) {
 }
 
 export async function atualizarStatusAgendamento(id: string, status: "CONFIRMADO" | "CONCLUIDO" | "CANCELADO") {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.agendamento.update({ where: { id }, data: { status } });
   revalidatePath("/agenda");
 }

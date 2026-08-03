@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ProdutoForm from "@/components/ProdutoForm";
 import { updateProduto } from "../../../actions";
 
 export default async function EditarProdutoPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const produto = await prisma.produto.findUnique({ where: { id: params.id } });
   if (!produto) notFound();
   return (

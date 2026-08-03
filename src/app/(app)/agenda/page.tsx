@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/tenant-client";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatDateTime } from "@/lib/utils";
 import AgendamentoStatusActions from "@/components/AgendamentoStatusActions";
 
@@ -24,6 +24,7 @@ type AgendamentoComRelacoes = Prisma.AgendamentoGetPayload<{
 }>;
 
 export default async function AgendaPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const agendamentos: AgendamentoComRelacoes[] = await prisma.agendamento.findMany({
     where: { dataHoraInicio: { gte: new Date(new Date().setDate(new Date().getDate() - 1)) } },
     orderBy: { dataHoraInicio: "asc" },

@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteAnimal } from "./actions";
 
 const PORTE_LABEL: Record<string, string> = { PEQUENO: "Pequeno", MEDIO: "Médio", GRANDE: "Grande" };
 
 export default async function AnimaisPage({ searchParams }: { searchParams: { q?: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const q = searchParams.q?.trim();
 
   const animais = await prisma.animal.findMany({

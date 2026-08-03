@@ -1,30 +1,22 @@
 /**
  * Integração com a API do Mercado Pago (Fase 2).
  *
- * Requer MERCADOPAGO_ACCESS_TOKEN no .env (obtido em
- * https://www.mercadopago.com.br/developers/panel/app).
+ * Multi-tenant: cada petshop-cliente usa a PRÓPRIA conta/token do Mercado
+ * Pago (configurado em /configuracoes, guardado criptografado na Empresa).
+ * Por isso toda função aqui recebe `accessToken` como parâmetro — quem
+ * chama é responsável por descriptografar o token da empresa certa antes
+ * (ver src/app/(app)/vendas/actions.ts).
  *
  * Usamos chamadas REST diretas (fetch) em vez do SDK oficial para manter
  * zero dependências extras — trade-off: perdemos tipagem forte do SDK,
- * ganhamos previsibilidade e um bundle menor. Se o time preferir, dá para
- * trocar por `mercadopago` (npm) sem afetar o resto do app, pois toda
- * chamada externa passa por este arquivo.
+ * ganhamos previsibilidade e um bundle menor.
  */
 
 const MP_API_URL = "https://api.mercadopago.com";
 
-function getAccessToken(): string {
-  const token = process.env.MERCADOPAGO_ACCESS_TOKEN;
-  if (!token) {
-    throw new Error(
-      "MERCADOPAGO_ACCESS_TOKEN não configurado. Defina no .env para habilitar cobranças (Fase 2)."
-    );
-  }
-  return token;
-}
-
 type CriarCobrancaInput = {
   cobrancaId: string; // id interno (Cobranca.id) — vira external_reference para conciliação no webhook
+  empresaId: string; // usado para montar o notification_url por tenant (ver criarLinkPagamentoCartao)
   valor: number;
   descricao: string;
   clienteNome: string;
@@ -37,11 +29,11 @@ type CriarCobrancaInput = {
  * Gera um pagamento Pix direto (Payments API) com QR Code.
  * Retorna o payload "copia e cola" e a imagem em base64 para exibir/enviar.
  */
-export async function criarPagamentoPix(input: CriarCobrancaInput) {
+export async function criarPagamentoPix(accessToken: string, input: CriarCobrancaInput) {
   const res = await fetch(`${MP_API_URL}/v1/payments`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       "X-Idempotency-Key": input.cobrancaId,
     },
@@ -75,7 +67,7 @@ export async function criarPagamentoPix(input: CriarCobrancaInput) {
  * Gera um boleto (Payments API, payment_method_id "bolbradesco").
  * Requer CPF/CNPJ do cliente.
  */
-export async function criarBoleto(input: CriarCobrancaInput) {
+export async function criarBoleto(accessToken: string, input: CriarCobrancaInput) {
   if (!input.clienteDocumento) {
     throw new Error("Documento (CPF/CNPJ) do cliente é obrigatório para gerar boleto.");
   }
@@ -83,7 +75,7 @@ export async function criarBoleto(input: CriarCobrancaInput) {
   const res = await fetch(`${MP_API_URL}/v1/payments`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
       "X-Idempotency-Key": input.cobrancaId,
     },
@@ -121,13 +113,13 @@ export async function criarBoleto(input: CriarCobrancaInput) {
  * Gera um link de pagamento universal (Checkout Pro) que aceita cartão,
  * Pix e boleto na mesma tela — ideal para "link de pagamento por cartão".
  */
-export async function criarLinkPagamentoCartao(input: CriarCobrancaInput) {
+export async function criarLinkPagamentoCartao(accessToken: string, input: CriarCobrancaInput) {
   const appUrl = process.env.APP_URL || "http://localhost:3000";
 
   const res = await fetch(`${MP_API_URL}/checkout/preferences`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -141,7 +133,7 @@ export async function criarLinkPagamentoCartao(input: CriarCobrancaInput) {
       ],
       external_reference: input.cobrancaId,
       payer: { name: input.clienteNome, email: input.clienteEmail },
-      notification_url: `${appUrl}/api/webhooks/mercadopago`,
+      notification_url: `${appUrl}/api/webhooks/mercadopago/${input.empresaId}`,
       back_urls: {
         success: `${appUrl}/vendas`,
         failure: `${appUrl}/vendas`,
@@ -163,9 +155,9 @@ export async function criarLinkPagamentoCartao(input: CriarCobrancaInput) {
 }
 
 /** Consulta o status atual de um pagamento pelo id do Mercado Pago. */
-export async function consultarPagamento(mercadoPagoId: string) {
+export async function consultarPagamento(accessToken: string, mercadoPagoId: string) {
   const res = await fetch(`${MP_API_URL}/v1/payments/${mercadoPagoId}`, {
-    headers: { Authorization: `Bearer ${getAccessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
     throw new Error(`Falha ao consultar pagamento ${mercadoPagoId}: ${res.status}`);

@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ClienteForm from "@/components/ClienteForm";
 import { updateCliente } from "../../actions";
 
 export default async function EditarClientePage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const cliente = await prisma.cliente.findUnique({ where: { id: params.id } });
   if (!cliente) notFound();
 

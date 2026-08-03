@@ -1,8 +1,10 @@
-// Schema do CRM do Petshop/Hotelzinho
+// Schema do banco DE CADA PETSHOP-CLIENTE (multi-tenant: um banco Supabase por empresa).
+// Os dados de login/usuário/empresa ficam no banco de controle (ver prisma/control/schema.prisma).
 // Documentação de decisões de modelagem: ver README.md
 
 generator client {
   provider = "prisma-client-js"
+  output   = "../../src/generated/tenant-client"
 }
 
 datasource db {
@@ -11,11 +13,6 @@ datasource db {
 }
 
 // ---------- Enums ----------
-
-enum Role {
-  ADMIN
-  ATENDENTE
-}
 
 enum PorteAnimal {
   PEQUENO
@@ -90,18 +87,11 @@ enum StatusWhatsapp {
 }
 
 // ---------- Modelos ----------
-
-model Usuario {
-  id         String   @id @default(cuid())
-  nome       String
-  email      String   @unique
-  senhaHash  String
-  role       Role     @default(ATENDENTE)
-  ativo      Boolean  @default(true)
-  createdAt  DateTime @default(now())
-
-  vendas     Venda[]
-}
+// OBS: não existe model Usuario aqui — login e usuários da equipe vivem no banco
+// de controle (prisma/control/schema.prisma). Campos como Venda.criadoPorId abaixo
+// guardam o id do Usuario do banco de controle apenas como referência solta
+// (sem @relation, pois são bancos diferentes); para exibir o nome de quem criou,
+// a aplicação busca esse usuário separadamente no controlPrisma.
 
 model Cliente {
   id            String   @id @default(cuid())
@@ -268,8 +258,7 @@ model Venda {
   valorTotal      Decimal        @db.Decimal(10, 2)
   status          StatusVenda    @default(CONCLUIDA)
   observacoes     String?
-  criadoPorId     String?
-  criadoPor       Usuario?       @relation(fields: [criadoPorId], references: [id])
+  criadoPorId     String?        // id do Usuario no banco de controle (sem @relation, ver nota acima)
   createdAt       DateTime       @default(now())
 
   itens           ItemVenda[]

@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 
 const contaSchema = z.object({
   descricao: z.string().min(1, "Informe a descrição"),
@@ -26,6 +26,7 @@ function parseForm(formData: FormData) {
 }
 
 export async function createContaPagar(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.contaPagar.create({
     data: { ...data, valor: Number(data.valor), dataVencimento: new Date(data.dataVencimento) },
@@ -35,6 +36,7 @@ export async function createContaPagar(formData: FormData) {
 }
 
 export async function updateContaPagar(id: string, formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
   await prisma.contaPagar.update({
     where: { id },
@@ -45,11 +47,13 @@ export async function updateContaPagar(id: string, formData: FormData) {
 }
 
 export async function marcarContaPagarPaga(id: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.contaPagar.update({ where: { id }, data: { status: "PAGO", dataPagamento: new Date() } });
   revalidatePath("/financeiro/contas-a-pagar");
 }
 
 export async function deleteContaPagar(id: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.contaPagar.delete({ where: { id } });
   revalidatePath("/financeiro/contas-a-pagar");
 }

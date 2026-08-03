@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ContaForm from "@/components/ContaForm";
 import { updateContaPagar } from "../../actions";
 
 export default async function EditarContaPagarPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const conta = await prisma.contaPagar.findUnique({ where: { id: params.id } });
   if (!conta) notFound();
   return (

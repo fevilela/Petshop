@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteContaPagar, marcarContaPagarPaga } from "./actions";
@@ -12,6 +12,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 export default async function ContasPagarPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const hoje = new Date();
   const contas = await prisma.contaPagar.findMany({ orderBy: { dataVencimento: "asc" } });
 

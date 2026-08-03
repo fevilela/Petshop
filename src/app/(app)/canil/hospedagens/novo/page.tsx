@@ -1,7 +1,8 @@
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { createHospedagem } from "../../actions";
 
 export default async function NovoCheckInPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const [canisLivres, animais] = await Promise.all([
     prisma.canil.findMany({ where: { status: "LIVRE" }, orderBy: { identificador: "asc" } }),
     prisma.animal.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, include: { cliente: true } }),

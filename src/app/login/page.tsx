@@ -1,11 +1,21 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, Suspense } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const conviteAceito = searchParams.get("conviteAceito") === "1";
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -39,6 +49,12 @@ export default function LoginPage() {
           <h1 className="text-2xl font-semibold text-brand-700">🐾 Petshop CRM</h1>
           <p className="text-sm text-gray-500 mt-1">Acesse com seu e-mail e senha</p>
         </div>
+
+        {conviteAceito && (
+          <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2 mb-4">
+            Senha criada com sucesso! Faça login abaixo.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

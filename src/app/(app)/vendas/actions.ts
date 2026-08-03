@@ -3,11 +3,11 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getServerSession } from "next-auth";
-import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
+import { controlPrisma } from "@/lib/control-prisma";
+import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
-import { sendTemplateMessage } from "@/lib/whatsapp";
+import { sendTemplateMessage, type WhatsappCredenciais } from "@/lib/whatsapp";
 import { normalizePhoneE164 } from "@/lib/utils";
 
 const itemSchema = z.object({
@@ -38,7 +38,7 @@ const vendaSchema = z.object({
 const FORMAS_COM_COBRANCA = ["BOLETO", "PIX_MERCADOPAGO", "CARTAO_LINK"] as const;
 
 export async function createVenda(formData: FormData) {
-  const session = await getServerSession(authOptions);
+  const { prisma, empresaId, usuarioId } = await getSessionTenantPrisma();
 
   const parsed = vendaSchema.parse({
     clienteId: formData.get("clienteId"),
@@ -93,7 +93,7 @@ export async function createVenda(formData: FormData) {
         formaPagamento: parsed.formaPagamento,
         valorTotal,
         observacoes: parsed.observacoes,
-        criadoPorId: session?.user.id,
+        criadoPorId: usuarioId,
         itens: { create: itensParaCriar },
       },
     });
@@ -130,8 +130,17 @@ export async function createVenda(formData: FormData) {
     });
 
     try {
+      const empresa = await controlPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+      if (!empresa.mercadoPagoAccessTokenEnc) {
+        throw new Error(
+          "Mercado Pago não configurado para esta empresa. Configure o token em /configuracoes."
+        );
+      }
+      const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+
       const input = {
         cobrancaId: cobranca.id,
+        empresaId,
         valor: valorTotal,
         descricao: `Venda #${venda.numero} - ${cliente.nome}`,
         clienteNome: cliente.nome,
@@ -141,19 +150,19 @@ export async function createVenda(formData: FormData) {
       };
 
       if (parsed.formaPagamento === "PIX_MERCADOPAGO") {
-        const pix = await criarPagamentoPix(input);
+        const pix = await criarPagamentoPix(accessToken, input);
         await prisma.cobranca.update({
           where: { id: cobranca.id },
           data: { mercadoPagoId: pix.mercadoPagoId, qrCode: pix.qrCode, qrCodeBase64: pix.qrCodeBase64 },
         });
       } else if (parsed.formaPagamento === "BOLETO") {
-        const boleto = await criarBoleto(input);
+        const boleto = await criarBoleto(accessToken, input);
         await prisma.cobranca.update({
           where: { id: cobranca.id },
           data: { mercadoPagoId: boleto.mercadoPagoId, linkPagamento: boleto.linkPagamento, linhaDigitavel: boleto.linhaDigitavel },
         });
       } else {
-        const link = await criarLinkPagamentoCartao(input);
+        const link = await criarLinkPagamentoCartao(accessToken, input);
         await prisma.cobranca.update({
           where: { id: cobranca.id },
           data: { mercadoPagoId: link.mercadoPagoId, linkPagamento: link.linkPagamento },
@@ -174,6 +183,7 @@ export async function createVenda(formData: FormData) {
  * fora do fluxo automático).
  */
 export async function marcarCobrancaPaga(cobrancaId: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.cobranca.update({
     where: { id: cobrancaId },
     data: { status: "PAGO", dataPagamento: new Date() },
@@ -187,6 +197,7 @@ export async function marcarCobrancaPaga(cobrancaId: string) {
  * "cobranca_disponivel" aprovado no WhatsApp Manager (ver README).
  */
 export async function enviarCobrancaWhatsapp(cobrancaId: string) {
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const cobranca = await prisma.cobranca.findUniqueOrThrow({
     where: { id: cobrancaId },
     include: { venda: { include: { cliente: true } } },
@@ -199,7 +210,16 @@ export async function enviarCobrancaWhatsapp(cobrancaId: string) {
   const linkOuInfo = cobranca.linkPagamento || cobranca.qrCode || "gerar manualmente";
 
   try {
-    const resultado = await sendTemplateMessage(telefone, "cobranca_disponivel", "pt_BR", [
+    const empresa = await controlPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+    if (!empresa.whatsappPhoneNumberId || !empresa.whatsappAccessTokenEnc) {
+      throw new Error("WhatsApp não configurado para esta empresa. Configure em /configuracoes.");
+    }
+    const creds: WhatsappCredenciais = {
+      phoneNumberId: empresa.whatsappPhoneNumberId,
+      accessToken: decrypt(empresa.whatsappAccessTokenEnc),
+    };
+
+    const resultado = await sendTemplateMessage(creds, telefone, "cobranca_disponivel", "pt_BR", [
       cliente.nome,
       String(cobranca.valor),
       cobranca.tipo,

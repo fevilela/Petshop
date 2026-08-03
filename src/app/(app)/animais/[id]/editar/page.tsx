@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import AnimalForm from "@/components/AnimalForm";
 import { updateAnimal } from "../../actions";
 
 export default async function EditarAnimalPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const [animal, clientes] = await Promise.all([
     prisma.animal.findUnique({ where: { id: params.id } }),
     prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),

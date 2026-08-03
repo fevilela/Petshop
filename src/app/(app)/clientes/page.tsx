@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteCliente } from "./actions";
 
@@ -8,6 +8,7 @@ export default async function ClientesPage({
 }: {
   searchParams: { q?: string };
 }) {
+  const { prisma } = await getSessionTenantPrisma();
   const q = searchParams.q?.trim();
 
   const clientes = await prisma.cliente.findMany({

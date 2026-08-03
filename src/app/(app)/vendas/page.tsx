@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { marcarCobrancaPaga, enviarCobrancaWhatsapp } from "./actions";
 
@@ -21,6 +21,7 @@ const COBRANCA_BADGE: Record<string, string> = {
 };
 
 export default async function VendasPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const vendas = await prisma.venda.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,

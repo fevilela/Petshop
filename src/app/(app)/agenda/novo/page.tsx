@@ -1,8 +1,9 @@
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import AgendaForm from "@/components/AgendaForm";
 import { createAgendamento } from "../actions";
 
 export default async function NovoAgendamentoPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const [clientes, animais, servicos, canis] = await Promise.all([
     prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.animal.findMany({ where: { ativo: true }, select: { id: true, nome: true, clienteId: true } }),

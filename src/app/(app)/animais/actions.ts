@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 
 const animalSchema = z.object({
   nome: z.string().min(1, "Informe o nome do animal"),
@@ -30,6 +30,7 @@ function parseForm(formData: FormData) {
 }
 
 export async function createAnimal(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   await prisma.animal.create({
@@ -50,6 +51,7 @@ export async function createAnimal(formData: FormData) {
 }
 
 export async function updateAnimal(id: string, formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   await prisma.animal.update({
@@ -71,6 +73,7 @@ export async function updateAnimal(id: string, formData: FormData) {
 }
 
 export async function deleteAnimal(id: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.animal.update({ where: { id }, data: { ativo: false } });
   revalidatePath("/animais");
 }

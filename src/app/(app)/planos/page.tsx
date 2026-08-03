@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency } from "@/lib/utils";
 import ToggleAtivoButton from "@/components/ToggleAtivoButton";
 import { togglePlanoAtivo } from "./actions";
 
 export default async function PlanosPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const planos = await prisma.plano.findMany({
     orderBy: { nome: "asc" },
     include: { _count: { select: { assinaturas: true, itens: true } } },

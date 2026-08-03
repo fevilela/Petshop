@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 
 const planoSchema = z.object({
   nome: z.string().min(1, "Informe o nome do plano"),
@@ -22,6 +22,7 @@ function parsePlano(formData: FormData) {
 }
 
 export async function createPlano(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parsePlano(formData);
   const plano = await prisma.plano.create({
     data: {
@@ -36,6 +37,7 @@ export async function createPlano(formData: FormData) {
 }
 
 export async function updatePlano(id: string, formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = parsePlano(formData);
   await prisma.plano.update({
     where: { id },
@@ -51,6 +53,7 @@ export async function updatePlano(id: string, formData: FormData) {
 }
 
 export async function togglePlanoAtivo(id: string, ativo: boolean) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.plano.update({ where: { id }, data: { ativo: !ativo } });
   revalidatePath("/planos");
 }
@@ -63,6 +66,7 @@ const planoItemSchema = z.object({
 });
 
 export async function addPlanoItem(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = planoItemSchema.parse({
     planoId: formData.get("planoId"),
     tipo: formData.get("tipo"),
@@ -83,6 +87,7 @@ export async function addPlanoItem(formData: FormData) {
 }
 
 export async function removePlanoItem(planoId: string, itemId: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.planoItem.delete({ where: { id: itemId } });
   revalidatePath(`/planos/${planoId}`);
 }
@@ -95,6 +100,7 @@ const assinaturaSchema = z.object({
 });
 
 export async function createAssinatura(formData: FormData) {
+  const { prisma } = await getSessionTenantPrisma();
   const data = assinaturaSchema.parse({
     planoId: formData.get("planoId"),
     clienteId: formData.get("clienteId"),
@@ -117,6 +123,7 @@ export async function createAssinatura(formData: FormData) {
 }
 
 export async function cancelarAssinatura(planoId: string, assinaturaId: string) {
+  const { prisma } = await getSessionTenantPrisma();
   await prisma.assinatura.update({
     where: { id: assinaturaId },
     data: { status: "CANCELADA", dataFim: new Date() },

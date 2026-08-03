@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ServicoForm from "@/components/ServicoForm";
 import { updateServico } from "../../../actions";
 
 export default async function EditarServicoPage({ params }: { params: { id: string } }) {
+  const { prisma } = await getSessionTenantPrisma();
   const servico = await prisma.servico.findUnique({ where: { id: params.id } });
   if (!servico) notFound();
   return (

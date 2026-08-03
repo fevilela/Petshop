@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import FinalizarHospedagemButton from "@/components/FinalizarHospedagemButton";
 
 export default async function HospedagensPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const hospedagens = await prisma.hospedagem.findMany({
     orderBy: { checkIn: "desc" },
     include: { canil: true, animal: { include: { cliente: true } } },

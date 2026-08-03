@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import DeleteButton from "@/components/DeleteButton";
 import { deleteCanil } from "./actions";
 
@@ -11,6 +11,7 @@ const STATUS_BADGE: Record<string, string> = {
 const STATUS_LABEL: Record<string, string> = { LIVRE: "Livre", OCUPADO: "Ocupado", MANUTENCAO: "Manutenção" };
 
 export default async function CanilPage() {
+  const { prisma } = await getSessionTenantPrisma();
   const canis = await prisma.canil.findMany({ orderBy: { identificador: "asc" } });
 
   return (
