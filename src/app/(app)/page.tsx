@@ -41,7 +41,13 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const cards: Card[] = [
+  // Anotar a lista bruta como Card[] ANTES do .filter(): se a anotação ficar
+  // só em `cards` (const cards: Card[] = [...].filter(...)), o literal do
+  // array não recebe tipagem contextual — TS infere `modulo` como `string`
+  // solto (alargado), e falha ao checar contra `Card[]` no final. Mesma
+  // classe de bug do empresaId ausente no create: tipo requerido não bate
+  // por causa de como a inferência de literal funciona nesse ponto do código.
+  const todosOsCards: Card[] = [
     { label: "Clientes", value: totalClientes, href: "/clientes" },
     { label: "Animais ativos", value: totalAnimais, href: "/animais", modulo: "animais" },
     { label: "Mensalistas ativos", value: assinaturasAtivas, href: "/planos", modulo: "planos" },
@@ -59,7 +65,8 @@ export default async function DashboardPage() {
       modulo: "financeiro",
       alerta: cobrancasVencidas > 0,
     },
-  ].filter((c) => !c.modulo || modulosPermitidos.includes(c.modulo));
+  ];
+  const cards = todosOsCards.filter((c) => !c.modulo || modulosPermitidos.includes(c.modulo));
 
   return (
     <div className="space-y-6">
