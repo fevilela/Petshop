@@ -18,8 +18,12 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELADO: "Cancelado",
 };
 
+type AgendamentoComRelacoes = Awaited<ReturnType<typeof prisma.agendamento.findMany<{
+  include: { cliente: true; animal: true; servico: true; canil: true };
+}>>>[number];
+
 export default async function AgendaPage() {
-  const agendamentos = await prisma.agendamento.findMany({
+  const agendamentos: AgendamentoComRelacoes[] = await prisma.agendamento.findMany({
     where: { dataHoraInicio: { gte: new Date(new Date().setDate(new Date().getDate() - 1)) } },
     orderBy: { dataHoraInicio: "asc" },
     include: { cliente: true, animal: true, servico: true, canil: true },

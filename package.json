@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -19,7 +20,7 @@
   "dependencies": {
     "@prisma/client": "5.20.0",
     "bcryptjs": "2.4.3",
-    "next": "14.2.15",
+    "next": "14.2.35",
     "next-auth": "4.24.8",
     "react": "18.3.1",
     "react-dom": "18.3.1",
