@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
+import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao, consultarPagamento } from "@/lib/mercadopago";
 import { sendTemplateMessage, type WhatsappCredenciais } from "@/lib/whatsapp";
 import { normalizePhoneE164 } from "@/lib/utils";
 
@@ -217,11 +217,60 @@ export async function createVenda(formData: FormData) {
  */
 export async function marcarCobrancaPaga(cobrancaId: string) {
   const { prisma } = await getSessionTenantPrisma();
-  await prisma.cobranca.update({
+  const cobranca = await prisma.cobranca.update({
     where: { id: cobrancaId },
     data: { status: "PAGO", dataPagamento: new Date() },
   });
   revalidatePath("/vendas");
+  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
+}
+
+/**
+ * Reconsulta o pagamento direto na API do Mercado Pago e atualiza a Cobrança
+ * se já tiver sido aprovada. Complementa o webhook (`/api/webhooks/mercadopago/
+ * [empresaId]`) para os casos em que ele ainda não disparou — ou nem foi
+ * configurado, já que cada petshop-cliente tem sua própria conta e pode não
+ * ter mexido nisso ainda: dá pro atendente clicar "Verificar pagamento" e
+ * confirmar na hora, sem depender só da notificação automática.
+ */
+export async function verificarPagamentoAction(cobrancaId: string) {
+  const { prisma, empresaId } = await getSessionTenantPrisma();
+  const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
+
+  if (cobranca.status !== "PENDENTE" || !cobranca.mercadoPagoId) {
+    revalidatePath("/vendas");
+    return;
+  }
+
+  try {
+    const empresa = await sharedPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+    if (!empresa.mercadoPagoAccessTokenEnc) {
+      throw new Error("Mercado Pago não configurado para esta empresa.");
+    }
+    const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+    const pagamento = await consultarPagamento(accessToken, cobranca.mercadoPagoId);
+
+    if (pagamento.status === "approved") {
+      await prisma.cobranca.update({
+        where: { id: cobrancaId },
+        data: {
+          status: "PAGO",
+          dataPagamento: pagamento.date_approved ? new Date(pagamento.date_approved) : new Date(),
+        },
+      });
+    } else if (pagamento.status === "cancelled" || pagamento.status === "rejected") {
+      await prisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
+    }
+    // Se ainda estiver "pending"/"in_process" no Mercado Pago, não fazemos
+    // nada — a cobrança continua PENDENTE, o que já é o estado correto.
+  } catch (err) {
+    // Não relançamos: uma falha na checagem manual não deve quebrar a tela
+    // de vendas para o atendente, só não atualiza nada desta vez.
+    console.error("Falha ao verificar pagamento manualmente:", err);
+  }
+
+  revalidatePath("/vendas");
+  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
 }
 
 /**
@@ -291,4 +340,5 @@ export async function enviarCobrancaWhatsapp(cobrancaId: string) {
   }
 
   revalidatePath("/vendas");
+  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
 }

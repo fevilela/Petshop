@@ -45,18 +45,35 @@ export async function POST(req: NextRequest, { params }: { params: { empresaId: 
     const cobranca = await tenantPrisma.cobranca.findUnique({ where: { id: cobrancaId } });
     if (!cobranca) return NextResponse.json({ ok: true, cobrancaNaoEncontrada: true });
 
-    if (pagamento.status === "approved") {
+    // Guarda contra status !== "PENDENTE": o Mercado Pago reenvia a mesma
+    // notificação várias vezes até receber 200 (e às vezes reenvia por
+    // engano mesmo depois disso). Sem esse guard, cada reentrega reescrevia
+    // `dataPagamento` para o horário do reprocessamento em vez do pagamento
+    // real, e uma cobrança já cancelada manualmente podia voltar a "PAGO".
+    if (pagamento.status === "approved" && cobranca.status === "PENDENTE") {
       await tenantPrisma.cobranca.update({
         where: { id: cobrancaId },
-        data: { status: "PAGO", dataPagamento: new Date(), mercadoPagoId: String(pagamento.id) },
+        data: {
+          status: "PAGO",
+          dataPagamento: pagamento.date_approved ? new Date(pagamento.date_approved) : new Date(),
+          mercadoPagoId: String(pagamento.id),
+        },
       });
-    } else if (["cancelled", "rejected"].includes(pagamento.status)) {
+    } else if (["cancelled", "rejected"].includes(pagamento.status) && cobranca.status === "PENDENTE") {
       await tenantPrisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Erro no webhook Mercado Pago:", err);
-    return NextResponse.json({ ok: false }, { status: 200 });
+    // 500 de propósito: um erro aqui pode ser transitório (banco
+    // momentaneamente fora, Mercado Pago instável) — devolver não-2xx faz o
+    // MP tentar de novo mais tarde em vez de perder a notificação de vez.
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
+}
+
+/** O Mercado Pago às vezes faz uma checagem GET ao salvar a URL do webhook no painel dele. */
+export async function GET() {
+  return NextResponse.json({ ok: true });
 }

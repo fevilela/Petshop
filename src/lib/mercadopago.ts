@@ -14,6 +14,18 @@
 
 const MP_API_URL = "https://api.mercadopago.com";
 
+/**
+ * URL do webhook por empresa. Passamos ela explicitamente em toda chamada
+ * que cria um pagamento (Pix, boleto, link) em vez de depender só da URL
+ * configurada manualmente no painel do Mercado Pago de cada petshop-cliente
+ * — assim o webhook funciona mesmo que o responsável pelo petshop nunca
+ * tenha configurado nada lá (ver src/app/api/webhooks/mercadopago/[empresaId]).
+ */
+function notificationUrl(empresaId: string): string {
+  const appUrl = process.env.APP_URL || "http://localhost:3000";
+  return `${appUrl}/api/webhooks/mercadopago/${empresaId}`;
+}
+
 type CriarCobrancaInput = {
   cobrancaId: string; // id interno (Cobranca.id) — vira external_reference para conciliação no webhook
   empresaId: string; // usado para montar o notification_url por tenant (ver criarLinkPagamentoCartao)
@@ -43,6 +55,7 @@ export async function criarPagamentoPix(accessToken: string, input: CriarCobranc
       payment_method_id: "pix",
       external_reference: input.cobrancaId,
       date_of_expiration: input.dataVencimento.toISOString(),
+      notification_url: notificationUrl(input.empresaId),
       payer: {
         email: input.clienteEmail || "cliente@petshop.local",
         first_name: input.clienteNome,
@@ -85,6 +98,7 @@ export async function criarBoleto(accessToken: string, input: CriarCobrancaInput
       payment_method_id: "bolbradesco",
       external_reference: input.cobrancaId,
       date_of_expiration: input.dataVencimento.toISOString(),
+      notification_url: notificationUrl(input.empresaId),
       payer: {
         email: input.clienteEmail || "cliente@petshop.local",
         first_name: input.clienteNome,
@@ -133,7 +147,7 @@ export async function criarLinkPagamentoCartao(accessToken: string, input: Criar
       ],
       external_reference: input.cobrancaId,
       payer: { name: input.clienteNome, email: input.clienteEmail },
-      notification_url: `${appUrl}/api/webhooks/mercadopago/${input.empresaId}`,
+      notification_url: notificationUrl(input.empresaId),
       back_urls: {
         success: `${appUrl}/vendas`,
         failure: `${appUrl}/vendas`,

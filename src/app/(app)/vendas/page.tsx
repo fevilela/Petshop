@@ -2,23 +2,7 @@ import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { marcarCobrancaPaga, enviarCobrancaWhatsapp } from "./actions";
-
-const FORMA_LABEL: Record<string, string> = {
-  DINHEIRO: "Dinheiro",
-  PIX_MANUAL: "Pix (manual)",
-  CARTAO_MANUAL: "Cartão (manual)",
-  BOLETO: "Boleto",
-  PIX_MERCADOPAGO: "Pix (Mercado Pago)",
-  CARTAO_LINK: "Link de pagamento",
-  MENSALISTA: "Mensalista",
-};
-
-const COBRANCA_BADGE: Record<string, string> = {
-  PENDENTE: "bg-amber-50 text-amber-700",
-  PAGO: "bg-green-50 text-green-700",
-  VENCIDO: "bg-red-50 text-red-700",
-  CANCELADO: "bg-gray-100 text-gray-500",
-};
+import { FORMA_LABEL, COBRANCA_BADGE } from "./labels";
 
 export default async function VendasPage() {
   const { prisma } = await getSessionTenantPrisma();
@@ -50,7 +34,11 @@ export default async function VendasPage() {
           <tbody>
             {vendas.map((v) => (
               <tr key={v.id}>
-                <td>{v.numero}</td>
+                <td>
+                  <Link href={`/vendas/${v.id}`} className="text-brand-700 hover:underline">
+                    #{v.numero}
+                  </Link>
+                </td>
                 <td>{v.cliente.nome}{v.animal ? <span className="text-gray-400"> · {v.animal.nome}</span> : ""}</td>
                 <td>{v.itens.length}</td>
                 <td>{FORMA_LABEL[v.formaPagamento] ?? v.formaPagamento}</td>
@@ -74,6 +62,9 @@ export default async function VendasPage() {
                       </form>
                     </>
                   )}
+                  <Link href={`/vendas/${v.id}`} className="text-sm text-gray-500 hover:underline">
+                    Ver
+                  </Link>
                 </td>
               </tr>
             ))}
