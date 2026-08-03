@@ -1,14 +1,14 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { atualizarConfiguracoesAction } from "./actions";
 
 export default async function ConfiguracoesPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.empresaId) redirect("/login");
 
-  const empresa = await controlPrisma.empresa.findUniqueOrThrow({ where: { id: session.user.empresaId } });
+  const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: session.user.empresaId } });
   const somenteLeitura = session.user.role !== "EMPRESA_ADMIN";
 
   return (

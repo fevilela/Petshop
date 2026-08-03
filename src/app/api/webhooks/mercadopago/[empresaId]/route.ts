@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { getTenantPrisma } from "@/lib/tenant-prisma";
 import { decrypt } from "@/lib/crypto";
 import { consultarPagamento } from "@/lib/mercadopago";
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { empresaId: 
       return NextResponse.json({ ok: true, ignored: true });
     }
 
-    const empresa = await controlPrisma.empresa.findUnique({ where: { id: params.empresaId } });
+    const empresa = await prisma.empresa.findUnique({ where: { id: params.empresaId } });
     if (!empresa?.mercadoPagoAccessTokenEnc) {
       return NextResponse.json({ ok: true, empresaSemMercadoPago: true });
     }
@@ -38,17 +38,20 @@ export async function POST(req: NextRequest, { params }: { params: { empresaId: 
     const cobrancaId: string | undefined = pagamento.external_reference;
     if (!cobrancaId) return NextResponse.json({ ok: true, semReferencia: true });
 
-    const prisma = await getTenantPrisma(params.empresaId);
-    const cobranca = await prisma.cobranca.findUnique({ where: { id: cobrancaId } });
+    // Client escopado pela empresa da URL: garante que este webhook nunca
+    // consegue mexer numa Cobranca de outra empresa, mesmo que o
+    // external_reference tenha sido manipulado.
+    const tenantPrisma = getTenantPrisma(params.empresaId);
+    const cobranca = await tenantPrisma.cobranca.findUnique({ where: { id: cobrancaId } });
     if (!cobranca) return NextResponse.json({ ok: true, cobrancaNaoEncontrada: true });
 
     if (pagamento.status === "approved") {
-      await prisma.cobranca.update({
+      await tenantPrisma.cobranca.update({
         where: { id: cobrancaId },
         data: { status: "PAGO", dataPagamento: new Date(), mercadoPagoId: String(pagamento.id) },
       });
     } else if (["cancelled", "rejected"].includes(pagamento.status)) {
-      await prisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
+      await tenantPrisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
     }
 
     return NextResponse.json({ ok: true });

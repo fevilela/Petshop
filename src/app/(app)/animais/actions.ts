@@ -33,6 +33,10 @@ export async function createAnimal(formData: FormData) {
   const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
+  // Garante que o tutor pertence a esta empresa (ver nota de segurança em
+  // vendas/actions.ts sobre FKs cruzando empresas no banco compartilhado).
+  await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
+
   await prisma.animal.create({
     data: {
       nome: data.nome,
@@ -53,6 +57,8 @@ export async function createAnimal(formData: FormData) {
 export async function updateAnimal(id: string, formData: FormData) {
   const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
+
+  await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
 
   await prisma.animal.update({
     where: { id },

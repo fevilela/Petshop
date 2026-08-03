@@ -74,6 +74,15 @@ export async function addPlanoItem(formData: FormData) {
     quantidade: formData.get("quantidade") || undefined,
   });
 
+  // Valida planoId + produto/serviço contra o client escopado (banco
+  // compartilhado — ver nota em vendas/actions.ts).
+  await prisma.plano.findUniqueOrThrow({ where: { id: data.planoId } });
+  if (data.tipo === "PRODUTO") {
+    await prisma.produto.findUniqueOrThrow({ where: { id: data.itemId } });
+  } else {
+    await prisma.servico.findUniqueOrThrow({ where: { id: data.itemId } });
+  }
+
   await prisma.planoItem.create({
     data: {
       planoId: data.planoId,
@@ -109,6 +118,7 @@ export async function createAssinatura(formData: FormData) {
   });
 
   const plano = await prisma.plano.findUniqueOrThrow({ where: { id: data.planoId } });
+  await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
 
   await prisma.assinatura.create({
     data: {

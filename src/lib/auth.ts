@@ -1,7 +1,7 @@
 import type { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 
 export const authOptions: AuthOptions = {
   session: { strategy: "jwt" },
@@ -16,11 +16,10 @@ export const authOptions: AuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.senha) return null;
 
-        // Login é sempre contra o banco de CONTROLE — tanto o super admin
-        // (Fernanda) quanto os usuários de cada petshop-cliente têm o
-        // cadastro aqui; só os dados operacionais (clientes, vendas...)
-        // ficam no banco de cada empresa.
-        const usuario = await controlPrisma.usuario.findUnique({
+        // Usuario não é tenant-scoped (não tem empresaId obrigatório: o
+        // SUPER_ADMIN não pertence a nenhuma empresa), por isso usamos o
+        // client compartilhado direto em vez do client escopado por tenant.
+        const usuario = await prisma.usuario.findUnique({
           where: { email: credentials.email.toLowerCase().trim() },
         });
         if (!usuario || !usuario.ativo || !usuario.senhaHash) return null;

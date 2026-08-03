@@ -27,6 +27,13 @@ export async function createAgendamento(formData: FormData) {
     observacoes: formData.get("observacoes") || undefined,
   });
 
+  // Valida que cliente/animal/serviço/canil pertencem a esta empresa (banco
+  // compartilhado — ver nota em vendas/actions.ts).
+  await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
+  await prisma.animal.findUniqueOrThrow({ where: { id: data.animalId } });
+  if (data.servicoId) await prisma.servico.findUniqueOrThrow({ where: { id: data.servicoId } });
+  if (data.canilId) await prisma.canil.findUniqueOrThrow({ where: { id: data.canilId } });
+
   await prisma.agendamento.create({
     data: {
       clienteId: data.clienteId,

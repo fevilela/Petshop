@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Prisma } from "@/generated/tenant-client";
+import { Prisma } from "@prisma/client";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatDateTime } from "@/lib/utils";
 import AgendamentoStatusActions from "@/components/AgendamentoStatusActions";

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
 import {
   criarUsuarioAction,
@@ -8,9 +8,7 @@ import {
 } from "../actions";
 
 const STATUS_BADGE: Record<string, string> = {
-  PROVISIONANDO: "bg-amber-50 text-amber-700",
   ATIVA: "bg-green-50 text-green-700",
-  ERRO_PROVISIONAMENTO: "bg-red-50 text-red-700",
   SUSPENSA: "bg-gray-100 text-gray-500",
 };
 
@@ -20,7 +18,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export default async function EmpresaDetalhePage({ params }: { params: { id: string } }) {
-  const empresa = await controlPrisma.empresa.findUnique({
+  const empresa = await prisma.empresa.findUnique({
     where: { id: params.id },
     include: { usuarios: { orderBy: { createdAt: "asc" } } },
   });
@@ -33,18 +31,11 @@ export default async function EmpresaDetalhePage({ params }: { params: { id: str
       <div>
         <h1 className="text-xl font-semibold text-gray-900">{empresa.nome}</h1>
         <span className={`badge ${STATUS_BADGE[empresa.status]}`}>{empresa.status}</span>
-        {empresa.provisionamentoErro && (
-          <p className="text-sm text-red-600 mt-2 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            {empresa.provisionamentoErro}
-          </p>
-        )}
       </div>
 
       <div className="card p-4 grid sm:grid-cols-2 gap-3 text-sm">
         <div><span className="text-gray-500">Responsável:</span> {empresa.emailResponsavel}</div>
         <div><span className="text-gray-500">CNPJ:</span> {empresa.documento ?? "—"}</div>
-        <div><span className="text-gray-500">Projeto Supabase:</span> {empresa.supabaseProjectRef ?? "—"}</div>
-        <div><span className="text-gray-500">Região:</span> {empresa.supabaseProjectRegion ?? "—"}</div>
         <div><span className="text-gray-500">Criado em:</span> {formatDateTime(empresa.createdAt)}</div>
       </div>
 

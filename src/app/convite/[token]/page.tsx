@@ -1,8 +1,8 @@
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { definirSenhaAction } from "./actions";
 
 export default async function ConvitePage({ params }: { params: { token: string } }) {
-  const convite = await controlPrisma.conviteUsuario.findUnique({
+  const convite = await prisma.conviteUsuario.findUnique({
     where: { token: params.token },
     include: { usuario: true },
   });

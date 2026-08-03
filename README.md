@@ -1,152 +1,218 @@
-# Petshop CRM
+# Petshop CRM (SaaS multi-tenant)
 
-CRM interno para petshop + hotelzinho: cadastros de clientes, animais, canil,
+CRM para petshop + hotelzinho — cadastros de clientes, animais, canil,
 produtos e serviços, agenda, vendas (avulsas e mensalistas), financeiro
 (contas a pagar/receber) e cobrança via Mercado Pago com envio automático
 pelo WhatsApp.
 
-Este é o **MVP da Fase 1** (cadastros, agenda, vendas manuais, financeiro
-manual). A Fase 2 (cobrança automática via Mercado Pago + envio automático
-por WhatsApp) já está com a estrutura pronta no código, faltando apenas
-credenciais reais — ver [Fase 2](#fase-2--pagamentos-e-whatsapp-automáticos).
+Este não é mais um sistema single-tenant para um único petshop: é a base de
+um **SaaS** — você (Fernanda) cadastra petshops-clientes, cada um com login e
+credenciais próprias de Mercado Pago/WhatsApp, e opera tudo a partir de uma
+área `/admin`.
 
 ## Stack e por quê
 
 - **Next.js 14 (App Router) + TypeScript** — um único deploy (frontend +
-  backend via Server Actions/Route Handlers), produtivo para telas de CRUD e
-  dashboards, sem precisar manter uma API separada.
-- **Prisma + PostgreSQL** — schema tipado, migrations versionadas, e
-  PostgreSQL é o banco recomendado por qualquer provedor gerenciado
-  (Neon, Supabase, Railway).
-- **NextAuth (Credentials + JWT)** — login simples de e-mail/senha para a
-  equipe do petshop. Trocar por outro provider (Google, etc.) no futuro é
-  incremental.
-- **Server Actions em vez de API REST própria** — menos boilerplate para
-  formulários de CRUD; toda mutação já roda no servidor com validação Zod.
+  backend via Server Actions/Route Handlers).
+- **Prisma + PostgreSQL** — schema tipado, migrations versionadas.
+- **NextAuth (Credentials + JWT)** — login de e-mail/senha; a sessão carrega
+  `role` (`SUPER_ADMIN` / `EMPRESA_ADMIN` / `EMPRESA_ATENDENTE`) e `empresaId`.
+- **Server Actions em vez de API REST própria.**
 - **Zero SDKs pesados para integrações externas** — `lib/mercadopago.ts` e
-  `lib/whatsapp.ts` usam `fetch` direto contra as APIs REST da Mercado Pago e
-  da Meta. Trade-off: perdemos tipagem forte de um SDK oficial, ganhamos
-  menos dependências e comportamento 100% previsível.
+  `lib/whatsapp.ts` usam `fetch` direto contra as APIs REST.
+
+## Arquitetura multi-tenant: banco único, isolado por `empresaId`
+
+Cada petshop-cliente é uma linha em `Empresa`. Todo model operacional
+(`Cliente`, `Animal`, `Venda`, `Cobranca`, etc.) tem uma coluna `empresaId` e
+todos vivem no **mesmo banco Postgres** — não existe mais um banco físico
+separado por empresa.
+
+**Por que não um banco por empresa?** Chegamos a implementar essa versão
+(provisionamento automático de um projeto Supabase por petshop via
+Management API). Ela dá isolamento mais forte, mas tem um custo real cedo
+demais para este estágio: um projeto Supabase por cliente esbarra rápido no
+limite de projetos gratuitos, provisionar um banco novo leva minutos e exige
+orquestração (criar projeto → esperar ficar pronto → rodar migration →
+guardar connection string), e cada deploy de schema precisa rodar contra N
+bancos em vez de 1. Isso é justificável quando há dezenas/centenas de
+clientes com requisitos de isolamento fortes (ex: contratuais); não é o
+problema certo para resolver com poucos clientes. **Trade-off assumido:**
+menos isolamento físico, ganho grande de simplicidade operacional agora. O
+código do provisionamento automático (`src/lib/supabase-management.ts`)
+ficou no repositório, sem uso — dá pra retomar essa rota depois sem
+reescrever do zero, se/quando fizer sentido.
+
+**Como o isolamento é garantido sem banco físico separado:** nenhuma tela ou
+Server Action monta `where: { empresaId }` manualmente (isso seria fácil de
+esquecer em algum lugar, e um esquecimento = vazamento de dados entre
+clientes). Em vez disso, `src/lib/tenant-prisma.ts` usa um **Prisma Client
+Extension** que intercepta toda query do Prisma Client e injeta
+`empresaId` automaticamente — em `where` para leitura/atualização/exclusão, e
+em `data` para criação. Todo código de tela/Server Action só faz:
+
+```ts
+const { prisma } = await getSessionTenantPrisma(); // dentro de uma page/action logada
+const clientes = await prisma.cliente.findMany(); // já vem só da empresa certa
+```
+
+**Limitação conhecida do extension:** ele não cobre escritas *aninhadas*
+dentro de um único `create`/`update` (ex: `venda.create({ data: { itens: {
+create: [...] } } })` não intercepta a criação dos `ItemVenda`). O único
+model afetado por isso hoje é `ItemVenda`, que por isso não tem `empresaId`
+próprio de propósito — só existe aninhado numa `Venda` já filtrada
+corretamente (ver comentário no `prisma/schema.prisma`). No único lugar onde
+usamos uma transação interativa (`$transaction(async (tx) => ...)`, em
+`vendas/actions.ts`), passamos `empresaId` explicitamente também, como
+reforço — não confiamos apenas na propagação do extension para dentro do
+client `tx` sem poder testar isso ao vivo.
+
+**Autenticação central:** só você cria usuários (por enquanto). Ao cadastrar
+um petshop-cliente em `/admin/empresas/novo`, o sistema cria a `Empresa`, cria
+o usuário `EMPRESA_ADMIN` responsável e manda um e-mail (Resend) com link de
+convite (`/convite/[token]`) para ele definir a própria senha. O mesmo
+admin do petshop pode então pedir para você criar acessos adicionais
+(atendentes) — ainda sem self-service.
+
+**Credenciais por petshop:** cada empresa configura seu próprio token do
+Mercado Pago e credenciais do WhatsApp Business em `/configuracoes` (só
+`EMPRESA_ADMIN` vê/edita). Ficam criptografadas (AES-256-GCM,
+`src/lib/crypto.ts`) na tabela `Empresa`. O webhook do Mercado Pago é por
+tenant: `/api/webhooks/mercadopago/[empresaId]`.
 
 ## Modelo de dados (resumo)
 
-`Cliente` → `Animal` (1:N) · `Canil` ↔ `Hospedagem` ↔ `Animal` ·
-`Produto` / `Servico` (catálogo) · `Plano` (template mensal) → `PlanoItem`
-(o que está incluso) · `Assinatura` (cliente + plano = "mensalista") ·
-`Venda` → `ItemVenda` (pode debitar de uma `Assinatura` em vez de gerar
-cobrança) · `Cobranca` (boleto/Pix/link, ligada a uma `Venda` ou a uma
-mensalidade) · `ContaPagar` / `ContaReceber` · `Agendamento` ·
-`WhatsappMensagem` (log de envios).
+`Empresa` (petshop-cliente) · `Usuario` (login, com `role` e `empresaId`
+opcional para `SUPER_ADMIN`) · `ConviteUsuario` (token de definição de
+senha) — e, escopados por `empresaId`: `Cliente` → `Animal` (1:N) · `Canil`
+↔ `Hospedagem` ↔ `Animal` · `Produto` / `Servico` (catálogo) · `Plano`
+(template mensal) → `PlanoItem` · `Assinatura` (cliente + plano =
+"mensalista") · `Venda` → `ItemVenda` · `Cobranca` (boleto/Pix/link) ·
+`ContaPagar` / `ContaReceber` · `Agendamento` · `WhatsappMensagem` (log).
 
 **Como funciona "alguns clientes são mensalistas, outros não":** não existe
 um campo booleano fixo no `Cliente`. Um cliente vira mensalista ao ganhar
 uma `Assinatura` ativa a um `Plano`. Na tela de Vendas, ao escolher a forma
 de pagamento "Mensalista", a venda é debitada da assinatura (sem gerar
 cobrança nova); qualquer outra forma de pagamento segue o fluxo avulso
-normal. Isso permite o mesmo cliente ter produtos avulsos E um plano mensal
-ao mesmo tempo.
+normal.
+
+**Nota sobre `Venda.numero`:** é uma sequência global (autoincrement do
+Postgres), não por empresa — o petshop A pode ter a venda #47 e o petshop B
+a #48, intercalados. Cosmético, não afeta nada funcionalmente; se algum dia
+precisar de numeração sequencial por empresa começando em 1, isso exige um
+contador por tabela (Postgres não faz autoincrement agrupado nativamente) —
+não implementado agora.
 
 ## Rodando localmente
 
 ```bash
 npm install
-cp .env.example .env   # preencha DATABASE_URL e NEXTAUTH_SECRET no mínimo
+cp .env.example .env   # preencha DATABASE_URL, ENCRYPTION_KEY e NEXTAUTH_SECRET no mínimo
 npx prisma migrate dev --name init
-npm run seed            # cria usuário admin@petshop.local / senha petshop123
+npm run seed            # cria seu login de SUPER_ADMIN + uma empresa de demonstração
 npm run dev
 ```
 
-Banco de dados: qualquer Postgres serve. Para começar rápido, crie um banco
-gratuito em [neon.tech](https://neon.tech) ou [supabase.com](https://supabase.com)
-e cole a connection string em `DATABASE_URL`.
+Banco de dados: qualquer Postgres serve (Neon, Supabase, Railway). Se usar
+Supabase, use a connection string do **Session Pooler** (a conexão direta é
+IPv6-only e não funciona a partir do Render/Vercel).
 
-`NEXTAUTH_SECRET`: gere com `openssl rand -base64 32`.
+`ENCRYPTION_KEY` / `NEXTAUTH_SECRET`: gere com
+`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`.
 
-## Deploy (Vercel + banco gerenciado)
+## Deploy (Render/Vercel + banco gerenciado)
 
-1. Suba o projeto num repositório Git e importe na Vercel.
-2. Configure as variáveis de ambiente do `.env.example` no painel da Vercel.
-3. Rode `npx prisma migrate deploy` (via CI ou manualmente) contra o banco de
-   produção antes do primeiro deploy.
+1. Suba o projeto num repositório Git e importe no Render/Vercel.
+2. Configure as variáveis de ambiente do `.env.example`.
+3. Rode `npx prisma migrate deploy` contra o banco de produção antes do
+   primeiro deploy, depois `npm run seed` (ou só a parte do SUPER_ADMIN, se
+   não quiser os dados de demonstração) para criar seu login.
 4. Aponte `NEXTAUTH_URL` e `APP_URL` para o domínio final.
 
-## Fase 2 — pagamentos e WhatsApp automáticos
+## Fluxo de cadastro de um petshop-cliente
 
-O código já está preparado, faltam credenciais:
+1. Você entra em `/admin/empresas/novo` e preenche nome, CNPJ, responsável.
+2. O sistema cria a `Empresa` (já `ATIVA` — não tem mais espera de
+   provisionamento) e o usuário `EMPRESA_ADMIN`, e manda o e-mail de convite.
+3. O responsável clica no link, define a senha (`/convite/[token]`), e já
+   consegue logar.
+4. Ele mesmo (ou você, a pedido dele) configura Mercado Pago e WhatsApp em
+   `/configuracoes`, e pode pedir a você para criar acessos de atendente.
 
-**Mercado Pago** (`lib/mercadopago.ts`)
-1. Crie uma aplicação em [mercadopago.com.br/developers/panel](https://www.mercadopago.com.br/developers/panel).
-2. Copie o Access Token de produção para `MERCADOPAGO_ACCESS_TOKEN`.
-3. Configure a URL de notificações (`https://seu-dominio/api/webhooks/mercadopago`)
-   no painel de Webhooks — é isso que atualiza `Cobranca.status` para `PAGO`
-   automaticamente.
-4. A partir daí, toda venda com forma de pagamento "Pix (Mercado Pago)",
-   "Boleto" ou "Link de pagamento" já vai gerar a cobrança de verdade.
+## Mercado Pago e WhatsApp (por petshop)
 
-**WhatsApp Cloud API** (`lib/whatsapp.ts`)
-1. Crie um app em [developers.facebook.com](https://developers.facebook.com/apps)
-   com o produto WhatsApp.
-2. Copie `WHATSAPP_PHONE_NUMBER_ID` e `WHATSAPP_ACCESS_TOKEN`.
-3. **Crie e aprove um template de mensagem** chamado `cobranca_disponivel` no
-   WhatsApp Manager (obrigatório pela Meta para iniciar conversa fora da
-   janela de 24h) com corpo parecido com:
+Cada petshop-cliente configura as próprias credenciais em `/configuracoes`
+(não são mais env vars globais):
+
+**Mercado Pago**
+1. O responsável cria uma aplicação em
+   [mercadopago.com.br/developers/panel](https://www.mercadopago.com.br/developers/panel)
+   e cola o Access Token de produção em `/configuracoes`.
+2. Configura a URL de notificações mostrada na própria tela
+   (`https://seu-dominio/api/webhooks/mercadopago/<empresaId>`) no painel de
+   Webhooks do Mercado Pago dele — é isso que atualiza `Cobranca.status`
+   para `PAGO` automaticamente.
+
+**WhatsApp Cloud API**
+1. Cria um app em [developers.facebook.com](https://developers.facebook.com/apps)
+   com o produto WhatsApp e cola `Phone Number ID` / `Access Token` em
+   `/configuracoes`.
+2. **Precisa criar e aprovar um template de mensagem** chamado
+   `cobranca_disponivel` no WhatsApp Manager (obrigatório pela Meta para
+   iniciar conversa fora da janela de 24h), com corpo parecido com:
    `"Olá {{1}}, sua cobrança de R$ {{2}} ({{3}}) está disponível: {{4}}"`.
-4. O botão "Enviar WhatsApp" na tela de Vendas já chama esse template.
 
-Sem essas variáveis configuradas, o sistema **não quebra**: a venda é criada
-normalmente, a cobrança fica pendente sem link/QR Code (pode ser gerada
-manualmente fora do sistema), e o botão de WhatsApp registra a falha no log
-(`WhatsappMensagem`) sem travar a tela.
+Sem essas credenciais configuradas, o sistema **não quebra**: a venda é
+criada normalmente, a cobrança fica pendente sem link/QR Code, e o botão de
+WhatsApp registra a falha no log (`WhatsappMensagem`) sem travar a tela.
 
 ## Decisões de arquitetura e trade-offs (autocrítica)
 
+- **Isolamento por `empresaId` num banco único, não por banco físico.** Ver
+  seção "Arquitetura multi-tenant" acima — é o trade-off mais importante
+  deste projeto, revertido de uma versão anterior com banco por tenant.
+  **Risco residual:** qualquer query que use `prisma.$queryRaw`/SQL cru no
+  futuro PRECISA filtrar `empresaId` manualmente — o extension só cobre a
+  API normal do Prisma Client. Hoje não há nenhum `$queryRaw` no código.
 - **Soft delete em `Animal`** (campo `ativo`), hard delete em `Cliente`,
   `Canil`, `Produto`/`Servico` (toggle `ativo` para produto/serviço).
   Motivo: animal tem histórico de vendas/agendamentos que não pode ficar
-  órfão; cliente sem histórico pode ser removido de fato. **Risco:** excluir
-  um cliente com vendas antigas vai falhar por causa da constraint de FK —
-  isso é intencional (evita perder histórico financeiro), mas a mensagem de
-  erro hoje é genérica do Prisma. Melhoria futura: capturar esse erro e
-  mostrar "não é possível excluir, este cliente tem X vendas".
+  órfão; cliente sem histórico pode ser removido de fato.
 - **Preço recalculado no servidor** em `vendas/actions.ts`: o formulário
-  manda apenas `produtoId`/`servicoId` + quantidade, nunca o preço. Isso
-  fecha um vetor óbvio de manipulação de preço via DevTools.
-- **Sem fila/job assíncrono para cobrança recorrente de mensalistas.** Hoje
-  a criação da cobrança mensal de cada `Assinatura` (todo dia X) **não está
-  automatizada** — é o próximo passo natural da Fase 2, via Vercel Cron ou
-  um worker separado, criando uma `Cobranca` por assinatura ativa no dia
-  configurado. Não implementei isso agora porque exige decidir onde rodar o
-  cron (Vercel Cron tem granularidade mínima de 1x/dia no plano gratuito) e
-  como lidar com falhas/reprocessamento — vale uma conversa antes de
-  implementar para não criar cobranças duplicadas.
-- **Sem testes automatizados.** Para um CRM financeiro eu recomendaria pelo
-  menos testes de integração no fluxo de `createVenda` (cálculo de total,
-  baixa de estoque, geração de cobrança) antes de ir para produção com
-  dinheiro real. Não escrevi agora para focar em fechar o escopo funcional
-  da Fase 1 primeiro — é o item de maior risco pendente.
-- **Sem RBAC granular.** Existe `Role` (ADMIN/ATENDENTE) no schema mas
-  nenhuma tela hoje restringe ações por papel. Se o petshop tiver mais de um
-  atendente, vale decidir quem pode excluir cadastros/vendas antes de abrir
-  o acesso.
+  manda apenas `produtoId`/`servicoId` + quantidade, nunca o preço.
+- **Sem fila/job assíncrono para cobrança recorrente de mensalistas.** A
+  criação da cobrança mensal de cada `Assinatura` não está automatizada —
+  próximo passo natural, via cron, criando uma `Cobranca` por assinatura
+  ativa no dia configurado.
+- **Sem testes automatizados.** Para um CRM financeiro multi-tenant, o item
+  de maior risco pendente é não ter testes de integração cobrindo
+  `createVenda` (cálculo de total, baixa de estoque, geração de cobrança,
+  e — agora — isolamento entre empresas).
 - **LGPD:** o sistema guarda CPF, telefone e dados de saúde do animal
-  (alergias em `observacoes`). Antes de ir para produção real, vale ter uma
-  política de retenção/exclusão de dados de clientes inativos.
+  (alergias em `observacoes`), agora multiplicado por N petshops-clientes.
+  Antes de operar com clientes reais, vale ter contrato de processamento de
+  dados com cada petshop-cliente e política de retenção/exclusão.
 
 ## Roadmap sugerido
 
-1. **Agora (Fase 1 — este MVP):** validar cadastros, agenda e vendas manuais
-   no dia a dia do petshop.
-2. **Fase 2:** ligar Mercado Pago + WhatsApp de verdade (só configurar
-   credenciais, código já pronto).
-3. **Fase 3:** cron de cobrança recorrente de mensalistas + lembretes de
+1. **Agora:** validar o fluxo de cadastro de petshop-cliente + convite +
+   login ponta a ponta com dados reais.
+2. **Próximo:** cron de cobrança recorrente de mensalistas + lembretes de
    agendamento por WhatsApp.
-4. **Fase 4:** RBAC por papel, testes automatizados no fluxo financeiro,
-   relatórios (DRE simplificado, comissão por atendente).
+3. **Depois:** self-service (petshop-cliente convida os próprios atendentes,
+   sem passar por você), testes automatizados no fluxo financeiro,
+   relatórios entre empresas (uso, faturamento da plataforma).
+4. **Se/quando a base de clientes crescer:** reavaliar isolamento por banco
+   físico (código-base já existe em `src/lib/supabase-management.ts`).
 
-## Login de teste (após `npm run seed`)
+## Login (após `npm run seed`)
 
-- E-mail: `admin@petshop.local`
-- Senha: `petshop123`
-
-**Troque essa senha (ou crie um novo usuário e apague este) antes de usar em
-produção.**
+- SUPER_ADMIN: o e-mail/senha definidos em `SUPER_ADMIN_EMAIL` /
+  `SUPER_ADMIN_SENHA` no seu `.env` (senão usa um padrão inseguro — o seed
+  avisa no terminal). Entre em `/admin/empresas` para cadastrar o primeiro
+  petshop-cliente.
+- Empresa de demonstração ("Petshop Demo"): não tem usuário próprio no seed
+  — crie um em `/admin/empresas` (usando o e-mail responsável do seed,
+  `demo@petshop.local`, ou edite o seed) se quiser logar como
+  `EMPRESA_ADMIN` para testar as telas operacionais.

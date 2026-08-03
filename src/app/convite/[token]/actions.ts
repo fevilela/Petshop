@@ -3,7 +3,7 @@
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 
 const senhaSchema = z
   .object({
@@ -21,19 +21,19 @@ export async function definirSenhaAction(token: string, formData: FormData) {
     confirmarSenha: formData.get("confirmarSenha"),
   });
 
-  const convite = await controlPrisma.conviteUsuario.findUnique({ where: { token } });
+  const convite = await prisma.conviteUsuario.findUnique({ where: { token } });
   if (!convite || convite.usadoEm || convite.expiraEm < new Date()) {
     throw new Error("Este link de convite é inválido ou já expirou. Peça um novo.");
   }
 
   const senhaHash = await bcrypt.hash(data.senha, 10);
 
-  await controlPrisma.$transaction([
-    controlPrisma.usuario.update({
+  await prisma.$transaction([
+    prisma.usuario.update({
       where: { id: convite.usuarioId },
       data: { senhaHash, ativo: true },
     }),
-    controlPrisma.conviteUsuario.update({
+    prisma.conviteUsuario.update({
       where: { id: convite.id },
       data: { usadoEm: new Date() },
     }),

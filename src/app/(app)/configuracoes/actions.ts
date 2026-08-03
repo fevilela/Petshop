@@ -4,9 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
-import { invalidateTenantPrisma } from "@/lib/tenant-prisma";
 
 const configSchema = z.object({
   mercadoPagoAccessToken: z.string().optional(),
@@ -37,7 +36,7 @@ export async function atualizarConfiguracoesAction(formData: FormData) {
     whatsappAccessToken: formData.get("whatsappAccessToken") || undefined,
   });
 
-  await controlPrisma.empresa.update({
+  await prisma.empresa.update({
     where: { id: empresaId },
     data: {
       ...(data.mercadoPagoAccessToken ? { mercadoPagoAccessTokenEnc: encrypt(data.mercadoPagoAccessToken) } : {}),
@@ -47,8 +46,5 @@ export async function atualizarConfiguracoesAction(formData: FormData) {
     },
   });
 
-  // Campos sensíveis não mudam qual banco a empresa usa, mas por segurança
-  // simples invalidamos o cache mesmo assim (barato, evita estado velho).
-  invalidateTenantPrisma(empresaId);
   revalidatePath("/configuracoes");
 }

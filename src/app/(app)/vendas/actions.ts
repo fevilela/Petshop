@@ -4,7 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
 import { sendTemplateMessage, type WhatsappCredenciais } from "@/lib/whatsapp";
@@ -55,6 +55,29 @@ export async function createVenda(formData: FormData) {
     throw new Error("Selecione a assinatura do cliente para debitar da mensalidade.");
   }
 
+  // Toda referência a outro registro (cliente, animal, assinatura) é
+  // validada contra o client já escopado por empresa antes de gravar: como
+  // o banco agora é compartilhado entre empresas, um id que existe mas
+  // pertence a OUTRO petshop precisa ser rejeitado aqui — sem essa checagem,
+  // seria possível "linkar" numa venda o id de um cliente/animal de outra
+  // empresa. `findUniqueOrThrow` com o client escopado já garante isso
+  // (lança se o id não pertencer a esta empresa).
+  const cliente = await prisma.cliente.findUniqueOrThrow({ where: { id: parsed.clienteId } });
+
+  const animalIds = Array.from(
+    new Set([parsed.animalId, ...itensInput.map((i) => i.animalId)].filter((v): v is string => !!v))
+  );
+  if (animalIds.length > 0) {
+    const animaisEncontrados = await prisma.animal.findMany({ where: { id: { in: animalIds } } });
+    if (animaisEncontrados.length !== animalIds.length) {
+      throw new Error("Um dos animais selecionados não foi encontrado.");
+    }
+  }
+
+  if (parsed.formaPagamento === "MENSALISTA") {
+    await prisma.assinatura.findUniqueOrThrow({ where: { id: parsed.assinaturaId! } });
+  }
+
   // Nunca confiamos no preço vindo do cliente: buscamos produtos/serviços no banco
   // e recalculamos os valores no servidor (evita manipulação do preço no navegador).
   const produtoIds = itensInput.filter((i) => i.tipo === "PRODUTO").map((i) => i.id);
@@ -84,9 +107,16 @@ export async function createVenda(formData: FormData) {
 
   const valorTotal = itensParaCriar.reduce((acc, i) => acc + i.subtotal, 0);
 
+  // empresaId é passado explicitamente aqui (mesmo o client `prisma` já
+  // sendo escopado por tenant) porque `$transaction(async (tx) => ...)` usa
+  // um client de transação interativa — não confiamos cegamente que o
+  // Client Extension de tenant-scoping se propaga para dentro de `tx` sem
+  // testar isso ao vivo (não dá pra rodar Prisma neste ambiente). É reforço
+  // redundante e barato para o caminho de código que mexe em dinheiro.
   const venda = await prisma.$transaction(async (tx) => {
     const v = await tx.venda.create({
       data: {
+        empresaId,
         clienteId: parsed.clienteId,
         animalId: parsed.animalId || undefined,
         assinaturaId: parsed.formaPagamento === "MENSALISTA" ? parsed.assinaturaId : undefined,
@@ -100,8 +130,11 @@ export async function createVenda(formData: FormData) {
 
     for (const item of itensParaCriar) {
       if (item.produtoId) {
-        await tx.produto.update({
-          where: { id: item.produtoId },
+        // updateMany (não update) de propósito: permite combinar id +
+        // empresaId no where sem depender do "extended where unique" do
+        // Prisma — garante que nunca decrementamos estoque de outra empresa.
+        await tx.produto.updateMany({
+          where: { id: item.produtoId, empresaId },
           data: { estoque: { decrement: item.quantidade } },
         });
       }
@@ -111,7 +144,6 @@ export async function createVenda(formData: FormData) {
   });
 
   if ((FORMAS_COM_COBRANCA as readonly string[]).includes(parsed.formaPagamento)) {
-    const cliente = await prisma.cliente.findUniqueOrThrow({ where: { id: parsed.clienteId } });
     const dataVencimento = new Date();
     dataVencimento.setDate(dataVencimento.getDate() + 3);
 
@@ -130,7 +162,7 @@ export async function createVenda(formData: FormData) {
     });
 
     try {
-      const empresa = await controlPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+      const empresa = await sharedPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
       if (!empresa.mercadoPagoAccessTokenEnc) {
         throw new Error(
           "Mercado Pago não configurado para esta empresa. Configure o token em /configuracoes."
@@ -210,7 +242,7 @@ export async function enviarCobrancaWhatsapp(cobrancaId: string) {
   const linkOuInfo = cobranca.linkPagamento || cobranca.qrCode || "gerar manualmente";
 
   try {
-    const empresa = await controlPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+    const empresa = await sharedPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
     if (!empresa.whatsappPhoneNumberId || !empresa.whatsappAccessTokenEnc) {
       throw new Error("WhatsApp não configurado para esta empresa. Configure em /configuracoes.");
     }

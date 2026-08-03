@@ -1,4 +1,4 @@
-import { RoleUsuario } from "@/generated/control-client";
+import { RoleUsuario } from "@prisma/client";
 import "next-auth";
 import "next-auth/jwt";
 

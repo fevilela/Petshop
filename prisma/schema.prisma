@@ -1,10 +1,15 @@
-// Schema do banco DE CADA PETSHOP-CLIENTE (multi-tenant: um banco Supabase por empresa).
-// Os dados de login/usuário/empresa ficam no banco de controle (ver prisma/control/schema.prisma).
-// Documentação de decisões de modelagem: ver README.md
+// Schema ÚNICO, compartilhado por TODOS os petshops-clientes da plataforma
+// ("banco único, separando por empresaId" — decisão de simplificar o MVP:
+// ver comentário no model Empresa e no README para o trade-off completo).
+//
+// Isolamento entre empresas é feito em nível de aplicação: todo model que
+// pertence a um petshop-cliente tem uma coluna `empresaId`, e todo acesso ao
+// Prisma Client passa por um Client Extension (ver src/lib/tenant-prisma.ts)
+// que injeta esse filtro automaticamente em toda query — nenhuma tela ou
+// Server Action precisa (ou pode) esquecer o filtro manualmente.
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../../src/generated/tenant-client"
 }
 
 datasource db {
@@ -13,6 +18,17 @@ datasource db {
 }
 
 // ---------- Enums ----------
+
+enum StatusEmpresa {
+  ATIVA
+  SUSPENSA
+}
+
+enum RoleUsuario {
+  SUPER_ADMIN
+  EMPRESA_ADMIN
+  EMPRESA_ATENDENTE
+}
 
 enum PorteAnimal {
   PEQUENO
@@ -86,15 +102,73 @@ enum StatusWhatsapp {
   FALHA
 }
 
-// ---------- Modelos ----------
-// OBS: não existe model Usuario aqui — login e usuários da equipe vivem no banco
-// de controle (prisma/control/schema.prisma). Campos como Venda.criadoPorId abaixo
-// guardam o id do Usuario do banco de controle apenas como referência solta
-// (sem @relation, pois são bancos diferentes); para exibir o nome de quem criou,
-// a aplicação busca esse usuário separadamente no controlPrisma.
+// ---------- Plataforma (dados da própria SaaS, não de um petshop) ----------
+
+// Um petshop-cliente que assina o SaaS. Cada Empresa usa o MESMO banco que
+// todas as outras (isolamento por `empresaId`, não por banco físico) e tem
+// suas próprias credenciais de Mercado Pago / WhatsApp — nunca compartilhadas
+// entre empresas.
+model Empresa {
+  id                        String        @id @default(cuid())
+  nome                      String
+  documento                 String?       // CNPJ do petshop-cliente
+  emailResponsavel          String
+  status                    StatusEmpresa @default(ATIVA)
+
+  // Credenciais próprias do petshop (cobrança e WhatsApp)
+  mercadoPagoAccessTokenEnc String?
+  whatsappPhoneNumberId     String?
+  whatsappBusinessAccountId String?
+  whatsappAccessTokenEnc    String?
+
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
+
+  usuarios                  Usuario[]
+  convites                  ConviteUsuario[]
+
+  @@index([status])
+}
+
+// Login da plataforma. SUPER_ADMIN (a Fernanda) não pertence a nenhuma Empresa
+// (empresaId nulo); EMPRESA_ADMIN/EMPRESA_ATENDENTE pertencem a uma Empresa.
+model Usuario {
+  id            String      @id @default(cuid())
+  nome          String
+  email         String      @unique
+  senhaHash     String?     // nulo até o convite ser aceito e a senha definida
+  role          RoleUsuario
+  empresaId     String?
+  empresa       Empresa?    @relation(fields: [empresaId], references: [id])
+  ativo         Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  convites      ConviteUsuario[]
+  vendasCriadas Venda[]     @relation("VendaCriadoPor")
+
+  @@index([empresaId])
+}
+
+// Token de convite para o usuário definir a própria senha pela primeira vez.
+model ConviteUsuario {
+  id        String    @id @default(cuid())
+  usuarioId String
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresaId String?
+  empresa   Empresa?  @relation(fields: [empresaId], references: [id])
+  token     String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+}
+
+// ---------- Dados operacionais de cada petshop (escopados por empresaId) ----------
 
 model Cliente {
   id            String   @id @default(cuid())
+  empresaId     String
   nome          String
   documento     String?  // CPF ou CNPJ
   telefone      String   // WhatsApp, formato E.164 ex: 5511999998888
@@ -111,12 +185,14 @@ model Cliente {
   contasReceber ContaReceber[]
   whatsappMsgs  WhatsappMensagem[]
 
-  @@index([nome])
-  @@index([telefone])
+  @@index([empresaId])
+  @@index([empresaId, nome])
+  @@index([empresaId, telefone])
 }
 
 model Animal {
   id             String       @id @default(cuid())
+  empresaId      String
   nome           String
   clienteId      String
   cliente        Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
@@ -134,12 +210,14 @@ model Animal {
   hospedagens    Hospedagem[]
   vendas         Venda[]
 
+  @@index([empresaId])
   @@index([clienteId])
 }
 
 model Canil {
   id             String       @id @default(cuid())
-  identificador  String       @unique // ex: "Canil 01"
+  empresaId      String
+  identificador  String       // ex: "Canil 01" — único DENTRO da empresa (duas empresas podem ter as duas um "Canil 01")
   tipoPorte      PorteAnimal?
   capacidade     Int          @default(1)
   status         StatusCanil  @default(LIVRE)
@@ -147,10 +225,14 @@ model Canil {
 
   hospedagens    Hospedagem[]
   agendamentos   Agendamento[]
+
+  @@unique([empresaId, identificador])
+  @@index([empresaId])
 }
 
 model Hospedagem {
   id               String    @id @default(cuid())
+  empresaId        String
   canilId          String
   canil            Canil     @relation(fields: [canilId], references: [id])
   animalId         String
@@ -162,27 +244,33 @@ model Hospedagem {
   observacoes      String?
   createdAt        DateTime  @default(now())
 
+  @@index([empresaId])
   @@index([canilId])
   @@index([animalId])
 }
 
 model Produto {
   id         String      @id @default(cuid())
+  empresaId  String
   nome       String
   categoria  String?
   descricao  String?
   preco      Decimal     @db.Decimal(10, 2)
   estoque    Int         @default(0)
-  sku        String?     @unique
+  sku        String?     // único DENTRO da empresa
   ativo      Boolean     @default(true)
   createdAt  DateTime    @default(now())
 
   itensVenda ItemVenda[]
   planoItens PlanoItem[]
+
+  @@unique([empresaId, sku])
+  @@index([empresaId])
 }
 
 model Servico {
   id             String        @id @default(cuid())
+  empresaId      String
   nome           String
   categoria      String?       // Banho, Tosa, Consulta, Hospedagem/diária...
   descricao      String?
@@ -194,11 +282,14 @@ model Servico {
   itensVenda     ItemVenda[]
   planoItens     PlanoItem[]
   agendamentos   Agendamento[]
+
+  @@index([empresaId])
 }
 
 // Modelo (template) de plano mensal reutilizável, ex: "Banho Mensal 4x"
 model Plano {
   id                String       @id @default(cuid())
+  empresaId         String
   nome              String
   descricao         String?
   valorMensal       Decimal      @db.Decimal(10, 2)
@@ -208,11 +299,16 @@ model Plano {
 
   itens             PlanoItem[]
   assinaturas       Assinatura[]
+
+  @@index([empresaId])
 }
 
-// Itens inclusos em um plano (quantidade mensal de cada produto/serviço)
+// Itens inclusos em um plano (quantidade mensal de cada produto/serviço).
+// Tem empresaId próprio (mesmo sendo sempre acessado a partir de um Plano)
+// porque também é criado/removido de forma avulsa (addPlanoItem/removePlanoItem).
 model PlanoItem {
   id         String   @id @default(cuid())
+  empresaId  String
   planoId    String
   plano      Plano    @relation(fields: [planoId], references: [id], onDelete: Cascade)
   produtoId  String?
@@ -221,12 +317,14 @@ model PlanoItem {
   servico    Servico? @relation(fields: [servicoId], references: [id])
   quantidade Int      @default(1) // quantas vezes por mês está incluso
 
+  @@index([empresaId])
   @@index([planoId])
 }
 
 // Assinatura de um cliente a um plano (o que torna o cliente "mensalista")
 model Assinatura {
   id            String           @id @default(cuid())
+  empresaId     String
   clienteId     String
   cliente       Cliente          @relation(fields: [clienteId], references: [id])
   planoId       String
@@ -241,13 +339,15 @@ model Assinatura {
   cobrancas     Cobranca[]
   vendas        Venda[]
 
+  @@index([empresaId])
   @@index([clienteId])
   @@index([status])
 }
 
 model Venda {
   id              String         @id @default(cuid())
-  numero          Int            @unique @default(autoincrement())
+  empresaId       String
+  numero          Int            @unique @default(autoincrement()) // sequência GLOBAL (não por empresa) — ver nota no README
   clienteId       String
   cliente         Cliente        @relation(fields: [clienteId], references: [id])
   animalId        String?
@@ -258,16 +358,21 @@ model Venda {
   valorTotal      Decimal        @db.Decimal(10, 2)
   status          StatusVenda    @default(CONCLUIDA)
   observacoes     String?
-  criadoPorId     String?        // id do Usuario no banco de controle (sem @relation, ver nota acima)
+  criadoPorId     String?
+  criadoPor       Usuario?       @relation("VendaCriadoPor", fields: [criadoPorId], references: [id])
   createdAt       DateTime       @default(now())
 
   itens           ItemVenda[]
   cobranca        Cobranca?
 
+  @@index([empresaId])
   @@index([clienteId])
   @@index([createdAt])
 }
 
+// Linha de item de uma Venda. NÃO tem empresaId próprio: só existe aninhada
+// dentro de uma Venda (nunca é lida/criada/apagada de forma avulsa), então o
+// isolamento por empresa vem do join com Venda.empresaId.
 model ItemVenda {
   id            String        @id @default(cuid())
   vendaId       String
@@ -290,6 +395,7 @@ model ItemVenda {
 // vinculada a uma Venda avulsa OU a uma mensalidade de Assinatura.
 model Cobranca {
   id               String         @id @default(cuid())
+  empresaId        String
   tipo             TipoCobranca
   status           StatusCobranca @default(PENDENTE)
   valor            Decimal        @db.Decimal(10, 2)
@@ -311,12 +417,14 @@ model Cobranca {
 
   whatsappMsgs     WhatsappMensagem[]
 
+  @@index([empresaId])
   @@index([status])
   @@index([assinaturaId])
 }
 
 model ContaPagar {
   id             String      @id @default(cuid())
+  empresaId      String
   descricao      String
   fornecedor     String?
   categoria      String?
@@ -327,6 +435,7 @@ model ContaPagar {
   observacoes    String?
   createdAt      DateTime    @default(now())
 
+  @@index([empresaId])
   @@index([status])
   @@index([dataVencimento])
 }
@@ -335,6 +444,7 @@ model ContaPagar {
 // Cobranças de vendas/mensalidades já aparecem no financeiro através do modelo Cobranca.
 model ContaReceber {
   id              String      @id @default(cuid())
+  empresaId       String
   descricao       String
   clienteId       String?
   cliente         Cliente?    @relation(fields: [clienteId], references: [id])
@@ -345,12 +455,14 @@ model ContaReceber {
   observacoes     String?
   createdAt       DateTime    @default(now())
 
+  @@index([empresaId])
   @@index([status])
   @@index([dataVencimento])
 }
 
 model Agendamento {
   id             String            @id @default(cuid())
+  empresaId      String
   clienteId      String
   cliente        Cliente           @relation(fields: [clienteId], references: [id])
   animalId       String
@@ -365,6 +477,7 @@ model Agendamento {
   observacoes    String?
   createdAt      DateTime          @default(now())
 
+  @@index([empresaId])
   @@index([dataHoraInicio])
   @@index([status])
 }
@@ -372,6 +485,7 @@ model Agendamento {
 // Log de mensagens enviadas via WhatsApp (cobranças, lembretes, etc.)
 model WhatsappMensagem {
   id          String          @id @default(cuid())
+  empresaId   String
   clienteId   String
   cliente     Cliente         @relation(fields: [clienteId], references: [id])
   cobrancaId  String?
@@ -383,6 +497,7 @@ model WhatsappMensagem {
   erro        String?
   createdAt   DateTime        @default(now())
 
+  @@index([empresaId])
   @@index([clienteId])
   @@index([status])
 }

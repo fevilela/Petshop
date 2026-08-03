@@ -1,22 +1,18 @@
 import Link from "next/link";
-import { controlPrisma } from "@/lib/control-prisma";
+import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
 
 const STATUS_BADGE: Record<string, string> = {
-  PROVISIONANDO: "bg-amber-50 text-amber-700",
   ATIVA: "bg-green-50 text-green-700",
-  ERRO_PROVISIONAMENTO: "bg-red-50 text-red-700",
   SUSPENSA: "bg-gray-100 text-gray-500",
 };
 const STATUS_LABEL: Record<string, string> = {
-  PROVISIONANDO: "Provisionando...",
   ATIVA: "Ativa",
-  ERRO_PROVISIONAMENTO: "Erro no provisionamento",
   SUSPENSA: "Suspensa",
 };
 
 export default async function EmpresasPage() {
-  const empresas = await controlPrisma.empresa.findMany({
+  const empresas = await prisma.empresa.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { usuarios: true } } },
   });
@@ -48,11 +44,6 @@ export default async function EmpresasPage() {
                 <td>{e._count.usuarios}</td>
                 <td>
                   <span className={`badge ${STATUS_BADGE[e.status]}`}>{STATUS_LABEL[e.status]}</span>
-                  {e.status === "ERRO_PROVISIONAMENTO" && e.provisionamentoErro && (
-                    <p className="text-xs text-red-600 mt-1 max-w-xs truncate" title={e.provisionamentoErro}>
-                      {e.provisionamentoErro}
-                    </p>
-                  )}
                 </td>
                 <td className="text-gray-500">{formatDateTime(e.createdAt)}</td>
               </tr>
@@ -63,10 +54,6 @@ export default async function EmpresasPage() {
           </tbody>
         </table>
       </div>
-
-      <p className="text-xs text-gray-400">
-        Provisionamento novo leva de 1 a 4 minutos (criação do banco na Supabase + migrations). Recarregue esta página para ver o status atualizar.
-      </p>
     </div>
   );
 }

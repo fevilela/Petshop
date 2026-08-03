@@ -70,6 +70,13 @@ export async function createHospedagem(formData: FormData) {
     observacoes: formData.get("observacoes") || undefined,
   });
 
+  // animalId precisa ser validado explicitamente: diferente do canilId (que
+  // já é protegido abaixo pelo canil.update dentro da mesma transação — se
+  // pertencesse a outra empresa, o update lançaria e a transação inteira
+  // seria revertida), não há mais nenhuma outra escrita nesta ação que
+  // rejeitaria um animalId de outra empresa.
+  await prisma.animal.findUniqueOrThrow({ where: { id: data.animalId } });
+
   await prisma.$transaction([
     prisma.hospedagem.create({
       data: {

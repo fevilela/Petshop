@@ -26,6 +26,7 @@ function parseForm(formData: FormData) {
 export async function createContaReceber(formData: FormData) {
   const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
+  if (data.clienteId) await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
   await prisma.contaReceber.create({
     data: { ...data, valor: Number(data.valor), dataVencimento: new Date(data.dataVencimento) },
   });
@@ -36,6 +37,7 @@ export async function createContaReceber(formData: FormData) {
 export async function updateContaReceber(id: string, formData: FormData) {
   const { prisma } = await getSessionTenantPrisma();
   const data = parseForm(formData);
+  if (data.clienteId) await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
   await prisma.contaReceber.update({
     where: { id },
     data: { ...data, valor: Number(data.valor), dataVencimento: new Date(data.dataVencimento) },
