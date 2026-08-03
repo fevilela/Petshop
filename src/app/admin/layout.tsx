@@ -17,6 +17,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/empresas" className="text-sm text-gray-600 hover:underline">
             Petshops-clientes
           </Link>
+          <Link href="/conta" className="text-sm text-gray-600 hover:underline">
+            Minha conta
+          </Link>
           <LogoutButton />
         </div>
       </header>

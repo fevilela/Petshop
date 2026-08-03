@@ -14,7 +14,11 @@ export default withAuth(
     const token = req.nextauth.token;
     const isSuperAdmin = token?.role === "SUPER_ADMIN";
     const isRotaAdmin = pathname.startsWith("/admin");
+    // /conta (trocar a própria senha) é neutra: qualquer papel logado acessa,
+    // sem o redirecionamento automático de SUPER_ADMIN <-> resto do sistema.
+    const isRotaNeutra = pathname.startsWith("/conta");
 
+    if (isRotaNeutra) return NextResponse.next();
     if (isRotaAdmin && !isSuperAdmin) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
