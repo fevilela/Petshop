@@ -3,16 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { ModuloKey } from "@/lib/modulos";
 
-type NavLink = { type: "link"; href: string; label: string; icon: string };
+type NavLink = { type: "link"; href: string; label: string; icon: string; modulo?: ModuloKey };
 type NavGroup = {
   type: "group";
   label: string;
   icon: string;
-  items: { href: string; label: string }[];
+  items: { href: string; label: string; modulo?: ModuloKey }[];
 };
 type NavItem = NavLink | NavGroup;
 
+// Itens sem `modulo` (Painel, Clientes, Configurações) ficam sempre visíveis.
+// Os demais só aparecem se o módulo estiver no conjunto efetivo do usuário
+// (empresa habilitou E, se for atendente, ele não foi restringido) — ver
+// src/lib/modulos.ts. Esconder aqui é só a camada de UX; a proteção de
+// verdade contra acesso direto por URL está nos layout.tsx de cada módulo.
 const NAV: NavItem[] = [
   { type: "link", href: "/", label: "Painel", icon: "🏠" },
   {
@@ -21,21 +27,21 @@ const NAV: NavItem[] = [
     icon: "📋",
     items: [
       { href: "/clientes", label: "Clientes" },
-      { href: "/animais", label: "Animais" },
-      { href: "/canil", label: "Canil / Hospedagem" },
-      { href: "/produtos-servicos", label: "Produtos & Serviços" },
-      { href: "/planos", label: "Planos (Mensalistas)" },
+      { href: "/animais", label: "Animais", modulo: "animais" },
+      { href: "/canil", label: "Canil / Hospedagem", modulo: "canil" },
+      { href: "/produtos-servicos", label: "Produtos & Serviços", modulo: "produtos_servicos" },
+      { href: "/planos", label: "Planos (Mensalistas)", modulo: "planos" },
     ],
   },
-  { type: "link", href: "/agenda", label: "Agenda", icon: "📅" },
-  { type: "link", href: "/vendas", label: "Vendas", icon: "💳" },
+  { type: "link", href: "/agenda", label: "Agenda", icon: "📅", modulo: "agenda" },
+  { type: "link", href: "/vendas", label: "Vendas", icon: "💳", modulo: "vendas" },
   {
     type: "group",
     label: "Financeiro",
     icon: "💰",
     items: [
-      { href: "/financeiro/contas-a-pagar", label: "Contas a Pagar" },
-      { href: "/financeiro/contas-a-receber", label: "Contas a Receber" },
+      { href: "/financeiro/contas-a-pagar", label: "Contas a Pagar", modulo: "financeiro" },
+      { href: "/financeiro/contas-a-receber", label: "Contas a Receber", modulo: "financeiro" },
     ],
   },
   { type: "link", href: "/configuracoes", label: "Configurações", icon: "⚙️" },
@@ -46,23 +52,38 @@ function isActiveHref(pathname: string | null, href: string) {
   return pathname === href || (href !== "/" && pathname.startsWith(href));
 }
 
+function permitido(modulo: ModuloKey | undefined, modulosPermitidos: ModuloKey[]) {
+  return !modulo || modulosPermitidos.includes(modulo);
+}
+
+function navFiltrado(modulosPermitidos: ModuloKey[]): NavItem[] {
+  return NAV.map((item) => {
+    if (item.type === "link") return item;
+    return { ...item, items: item.items.filter((sub) => permitido(sub.modulo, modulosPermitidos)) };
+  }).filter((item) => {
+    if (item.type === "link") return permitido(item.modulo, modulosPermitidos);
+    return item.items.length > 0;
+  });
+}
+
 /** Nome dos grupos que contêm a rota ativa (para já abrir o submenu certo ao navegar). */
-function groupsComRotaAtiva(pathname: string | null): string[] {
-  return NAV.filter(
+function groupsComRotaAtiva(pathname: string | null, nav: NavItem[]): string[] {
+  return nav.filter(
     (item): item is NavGroup => item.type === "group" && item.items.some((sub) => isActiveHref(pathname, sub.href))
   ).map((g) => g.label);
 }
 
-export default function Sidebar() {
+export default function Sidebar({ modulosPermitidos }: { modulosPermitidos: ModuloKey[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<string[]>(() => groupsComRotaAtiva(pathname));
+  const nav = navFiltrado(modulosPermitidos);
+  const [expandedGroups, setExpandedGroups] = useState<string[]>(() => groupsComRotaAtiva(pathname, nav));
 
   // Se o usuário navegar (via link direto, botão voltar etc.) para dentro de um
   // grupo que ainda não estava aberto, abrimos automaticamente — sem fechar os
   // que o usuário já tinha aberto manualmente.
   useEffect(() => {
-    const ativos = groupsComRotaAtiva(pathname);
+    const ativos = groupsComRotaAtiva(pathname, nav);
     setExpandedGroups((prev) => Array.from(new Set([...prev, ...ativos])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
@@ -93,7 +114,7 @@ export default function Sidebar() {
           <span className="text-lg font-semibold text-brand-700">🐾 Petshop CRM</span>
         </div>
         <nav className="p-3 space-y-1 overflow-y-auto" aria-label="Navegação principal">
-          {NAV.map((item) => {
+          {nav.map((item) => {
             if (item.type === "link") {
               const active = isActiveHref(pathname, item.href);
               return (

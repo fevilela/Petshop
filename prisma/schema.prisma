@@ -30,6 +30,11 @@ enum RoleUsuario {
   EMPRESA_ATENDENTE
 }
 
+enum TipoDocumento {
+  CPF
+  CNPJ
+}
+
 enum PorteAnimal {
   PEQUENO
   MEDIO
@@ -111,7 +116,8 @@ enum StatusWhatsapp {
 model Empresa {
   id                        String        @id @default(cuid())
   nome                      String
-  documento                 String?       // CNPJ do petshop-cliente
+  tipoDocumento             TipoDocumento?
+  documento                 String?       // CPF ou CNPJ do petshop-cliente, conforme tipoDocumento
   emailResponsavel          String
   status                    StatusEmpresa @default(ATIVA)
 
@@ -120,6 +126,13 @@ model Empresa {
   whatsappPhoneNumberId     String?
   whatsappBusinessAccountId String?
   whatsappAccessTokenEnc    String?
+
+  // Módulos habilitados para esta empresa (liga/desliga telas inteiras, ex:
+  // um petshop sem hotelzinho não precisa de Canil/Hospedagem). Controla o
+  // teto de acesso: um usuário nunca vê um módulo que a própria empresa não
+  // tem habilitado, mesmo que o campo dele (Usuario.modulosPermitidos) o
+  // liste. Ver src/lib/modulos.ts para a lista canônica de chaves válidas.
+  modulosHabilitados        String[]      @default(["animais", "canil", "produtos_servicos", "planos", "agenda", "vendas", "financeiro"])
 
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
@@ -133,18 +146,24 @@ model Empresa {
 // Login da plataforma. SUPER_ADMIN (a Fernanda) não pertence a nenhuma Empresa
 // (empresaId nulo); EMPRESA_ADMIN/EMPRESA_ATENDENTE pertencem a uma Empresa.
 model Usuario {
-  id            String      @id @default(cuid())
-  nome          String
-  email         String      @unique
-  senhaHash     String?     // nulo até o convite ser aceito e a senha definida
-  role          RoleUsuario
-  empresaId     String?
-  empresa       Empresa?    @relation(fields: [empresaId], references: [id])
-  ativo         Boolean     @default(true)
-  createdAt     DateTime    @default(now())
+  id                String      @id @default(cuid())
+  nome              String
+  email             String      @unique
+  senhaHash         String?     // nulo até o convite ser aceito e a senha definida
+  role              RoleUsuario
+  empresaId         String?
+  empresa           Empresa?    @relation(fields: [empresaId], references: [id])
+  ativo             Boolean     @default(true)
+  createdAt         DateTime    @default(now())
 
-  convites      ConviteUsuario[]
-  vendasCriadas Venda[]     @relation("VendaCriadoPor")
+  // Só tem efeito para EMPRESA_ATENDENTE (EMPRESA_ADMIN e SUPER_ADMIN sempre
+  // veem tudo que a empresa habilitou). Lista vazia = sem restrição extra
+  // (herda todos os módulos da empresa); lista não-vazia = restringe à
+  // interseção com os módulos da empresa. Ver src/lib/modulos.ts.
+  modulosPermitidos String[]    @default([])
+
+  convites          ConviteUsuario[]
+  vendasCriadas     Venda[]     @relation("VendaCriadoPor")
 
   @@index([empresaId])
 }

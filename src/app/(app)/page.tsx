@@ -1,9 +1,13 @@
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
+import { getModulosEfetivosSessao, type ModuloKey } from "@/lib/modulos";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import Link from "next/link";
 
+type Card = { label: string; value: string | number; href: string; modulo?: ModuloKey; alerta?: boolean };
+
 export default async function DashboardPage() {
   const { prisma } = await getSessionTenantPrisma();
+  const modulosPermitidos = await getModulosEfetivosSessao();
   const inicioMes = new Date();
   inicioMes.setDate(1);
   inicioMes.setHours(0, 0, 0, 0);
@@ -37,23 +41,25 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const cards = [
+  const cards: Card[] = [
     { label: "Clientes", value: totalClientes, href: "/clientes" },
-    { label: "Animais ativos", value: totalAnimais, href: "/animais" },
-    { label: "Mensalistas ativos", value: assinaturasAtivas, href: "/planos" },
+    { label: "Animais ativos", value: totalAnimais, href: "/animais", modulo: "animais" },
+    { label: "Mensalistas ativos", value: assinaturasAtivas, href: "/planos", modulo: "planos" },
     {
       label: "Vendas no mês",
       value: `${vendasMes._count} · ${formatCurrency(Number(vendasMes._sum.valorTotal ?? 0))}`,
       href: "/vendas",
+      modulo: "vendas",
     },
-    { label: "Cobranças pendentes", value: cobrancasPendentes, href: "/financeiro/contas-a-receber" },
+    { label: "Cobranças pendentes", value: cobrancasPendentes, href: "/financeiro/contas-a-receber", modulo: "financeiro" },
     {
       label: "Cobranças vencidas",
       value: cobrancasVencidas,
       href: "/financeiro/contas-a-receber",
+      modulo: "financeiro",
       alerta: cobrancasVencidas > 0,
     },
-  ];
+  ].filter((c) => !c.modulo || modulosPermitidos.includes(c.modulo));
 
   return (
     <div className="space-y-6">
@@ -76,6 +82,7 @@ export default async function DashboardPage() {
         ))}
       </div>
 
+      {modulosPermitidos.includes("agenda") && (
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-medium text-gray-900">Próximos agendamentos</h2>
@@ -99,6 +106,7 @@ export default async function DashboardPage() {
           </ul>
         )}
       </div>
+      )}
     </div>
   );
 }

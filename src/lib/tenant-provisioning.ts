@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { gerarToken } from "@/lib/crypto";
+import { gerarToken, encrypt } from "@/lib/crypto";
 import { enviarEmail, templateConviteHtml } from "@/lib/resend";
+import { TODOS_MODULOS, type ModuloKey } from "@/lib/modulos";
+import type { TipoDocumento } from "@prisma/client";
 
 // Provisionamento automático de um banco Supabase por empresa foi adiado
 // (ver src/lib/supabase-management.ts, mantido no repo mas sem uso — dá pra
@@ -15,7 +17,10 @@ type CadastrarEmpresaInput = {
   nomeEmpresa: string;
   emailResponsavel: string;
   nomeResponsavel: string;
+  tipoDocumento?: TipoDocumento;
   documento?: string;
+  mercadoPagoAccessToken?: string;
+  modulosHabilitados: ModuloKey[];
 };
 
 /** Cadastra um petshop-cliente novo e convida o responsável (EMPRESA_ADMIN) por e-mail. */
@@ -23,9 +28,14 @@ export async function criarEmpresaEIniciarProvisionamento(input: CadastrarEmpres
   const empresa = await prisma.empresa.create({
     data: {
       nome: input.nomeEmpresa,
+      tipoDocumento: input.tipoDocumento,
       documento: input.documento,
       emailResponsavel: input.emailResponsavel,
       status: "ATIVA",
+      mercadoPagoAccessTokenEnc: input.mercadoPagoAccessToken ? encrypt(input.mercadoPagoAccessToken) : undefined,
+      // Fallback pra TODOS_MODULOS se a lista vier vazia: evita cadastrar um
+      // petshop sem querer com tudo desligado por um checkbox desmarcado.
+      modulosHabilitados: input.modulosHabilitados.length > 0 ? input.modulosHabilitados : TODOS_MODULOS,
     },
   });
 
@@ -73,6 +83,8 @@ export async function criarUsuarioEmpresaEConvidar(params: {
   nome: string;
   email: string;
   role: "EMPRESA_ADMIN" | "EMPRESA_ATENDENTE";
+  /** Só tem efeito se role for EMPRESA_ATENDENTE; vazio = sem restrição extra. */
+  modulosPermitidos?: ModuloKey[];
 }) {
   const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: params.empresaId } });
 
@@ -82,6 +94,7 @@ export async function criarUsuarioEmpresaEConvidar(params: {
       email: params.email.toLowerCase().trim(),
       role: params.role,
       empresaId: params.empresaId,
+      modulosPermitidos: params.role === "EMPRESA_ATENDENTE" ? params.modulosPermitidos ?? [] : [],
     },
   });
 
