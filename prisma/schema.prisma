@@ -142,6 +142,7 @@ model Animal {
   agendamentos   Agendamento[]
   itensVenda     ItemVenda[]
   hospedagens    Hospedagem[]
+  vendas         Venda[]
 
   @@index([clienteId])
 }

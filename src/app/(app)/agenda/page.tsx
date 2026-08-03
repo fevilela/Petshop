@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatDateTime } from "@/lib/utils";
 import AgendamentoStatusActions from "@/components/AgendamentoStatusActions";
@@ -18,9 +19,9 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELADO: "Cancelado",
 };
 
-type AgendamentoComRelacoes = Awaited<ReturnType<typeof prisma.agendamento.findMany<{
+type AgendamentoComRelacoes = Prisma.AgendamentoGetPayload<{
   include: { cliente: true; animal: true; servico: true; canil: true };
-}>>>[number];
+}>;
 
 export default async function AgendaPage() {
   const agendamentos: AgendamentoComRelacoes[] = await prisma.agendamento.findMany({
