@@ -38,7 +38,14 @@ export default function ConfiguracoesForm({
   return (
     <form action={formAction} className="card p-6 space-y-6 max-w-xl">
       <div>
-        <h2 className="font-medium text-gray-900 mb-2">Mercado Pago</h2>
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="font-medium text-gray-900">Mercado Pago</h2>
+          {mercadoPagoConfigurado ? (
+            <span className="badge bg-green-50 text-green-700">✓ Configurado</span>
+          ) : (
+            <span className="badge bg-gray-100 text-gray-500">Não configurado</span>
+          )}
+        </div>
         <label className="label" htmlFor="mercadoPagoAccessToken">Access Token de produção</label>
         <input
           id="mercadoPagoAccessToken"
