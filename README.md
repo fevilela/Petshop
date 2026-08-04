@@ -129,10 +129,25 @@ IPv6-only e não funciona a partir do Render/Vercel).
 
 1. Suba o projeto num repositório Git e importe no Render/Vercel.
 2. Configure as variáveis de ambiente do `.env.example`.
-3. Rode `npx prisma migrate deploy` contra o banco de produção antes do
-   primeiro deploy, depois `npm run seed` (ou só a parte do SUPER_ADMIN, se
-   não quiser os dados de demonstração) para criar seu login.
+3. No primeiro deploy, depois que o serviço subir, rode `npm run seed` (ou
+   só a parte do SUPER_ADMIN, se não quiser os dados de demonstração) para
+   criar seu login.
 4. Aponte `NEXTAUTH_URL` e `APP_URL` para o domínio final.
+
+**Migrations rodam sozinhas a cada deploy.** O script `build`
+(`package.json`) é `prisma migrate deploy && next build` — toda migration
+nova commitada em `prisma/migrations/` aplica automaticamente no banco de
+produção antes do build, sem precisar rodar nada manualmente depois de dar
+push. **Trade-off assumido:** ganha não esquecer de aplicar uma migration
+(já aconteceu duas vezes nesta mesma sessão — telas quebrando porque a
+coluna nova ainda não existia no banco), perde ter uma pausa manual pra
+revisar uma migration antes dela rodar em produção. Como só quem edita o
+schema aqui sou eu (guiada por você) e todas as migrations até agora são
+aditivas (nunca `DROP TABLE`/`DROP COLUMN` sem ser um pedido explícito seu),
+o risco de uma migration destrutiva "escapar" é baixo — mas vale saber que
+esse freio manual não existe mais. Exige que `DATABASE_URL` esteja
+disponível no ambiente de **build** do Render, não só em runtime (é o
+padrão pra Web Services lá, não precisa configurar nada extra).
 
 ## Fluxo de cadastro de um petshop-cliente
 
