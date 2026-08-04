@@ -23,6 +23,26 @@ type CadastrarEmpresaInput = {
   modulosHabilitados: ModuloKey[];
 };
 
+/**
+ * Criptografa o token do Mercado Pago pra gravar no cadastro da empresa —
+ * sem travar a criação do petshop-cliente se isso falhar (ex: ENCRYPTION_KEY
+ * ausente/inválida no servidor). Mesmo princípio já aplicado ao e-mail de
+ * convite (ver `criarConviteEEnviarEmail` abaixo): o token do Mercado Pago
+ * é um dado OPCIONAL neste formulário — o admin pode colar depois em
+ * `/configuracoes` assim que a causa for corrigida — então uma falha aqui
+ * não pode derrubar a criação da Empresa/usuário, que já é o que realmente
+ * importa nesta tela.
+ */
+function tentarCriptografarTokenMercadoPago(token: string | undefined): string | undefined {
+  if (!token) return undefined;
+  try {
+    return encrypt(token);
+  } catch (err) {
+    console.error("[tenant-provisioning] Falha ao criptografar token do Mercado Pago (empresa criada sem ele):", err);
+    return undefined;
+  }
+}
+
 /** Cadastra um petshop-cliente novo e convida o responsável (EMPRESA_ADMIN) por e-mail. */
 export async function criarEmpresaEIniciarProvisionamento(input: CadastrarEmpresaInput) {
   const empresa = await prisma.empresa.create({
@@ -32,7 +52,7 @@ export async function criarEmpresaEIniciarProvisionamento(input: CadastrarEmpres
       documento: input.documento,
       emailResponsavel: input.emailResponsavel,
       status: "ATIVA",
-      mercadoPagoAccessTokenEnc: input.mercadoPagoAccessToken ? encrypt(input.mercadoPagoAccessToken) : undefined,
+      mercadoPagoAccessTokenEnc: tentarCriptografarTokenMercadoPago(input.mercadoPagoAccessToken),
       // Fallback pra TODOS_MODULOS se a lista vier vazia: evita cadastrar um
       // petshop sem querer com tudo desligado por um checkbox desmarcado.
       modulosHabilitados: input.modulosHabilitados.length > 0 ? input.modulosHabilitados : TODOS_MODULOS,
