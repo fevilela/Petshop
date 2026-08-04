@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
-import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
-import CopyButton from "@/components/CopyButton";
-import { FORMA_LABEL, COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "../labels";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
+import CobrancaPainel from "@/components/CobrancaPainel";
+import { FORMA_LABEL } from "@/lib/cobranca-labels";
 import { marcarCobrancaPaga, verificarPagamentoAction } from "../actions";
 
 /** Formas de pagamento que deveriam ter gerado uma Cobrança via Mercado Pago. */
@@ -106,129 +106,14 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
         )}
 
         {cobranca && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 flex-wrap text-sm">
-              <span className={`badge ${COBRANCA_BADGE[cobranca.status]}`}>{cobranca.status}</span>
-              <span className="text-gray-500">
-                {TIPO_COBRANCA_LABEL[cobranca.tipo] ?? cobranca.tipo} · {formatCurrency(Number(cobranca.valor))}
-              </span>
-              <span className="text-gray-500">
-                Vencimento: {formatDateTime(cobranca.dataVencimento)}
-              </span>
-              {cobranca.dataPagamento && (
-                <span className="text-gray-500">Pago em: {formatDateTime(cobranca.dataPagamento)}</span>
-              )}
-            </div>
-
-            {!cobranca.mercadoPagoId && (
-              <p className="text-sm text-amber-700">
-                Não foi possível gerar essa cobrança no Mercado Pago (token não configurado ou
-                chamada falhou). Confira as credenciais em /configuracoes — depois disso é preciso
-                registrar uma nova venda, esta cobrança não tem como ser regerada automaticamente.
-              </p>
-            )}
-
-            {cobranca.tipo === "PIX" && cobranca.qrCode && (
-              <div className="border-t pt-4 space-y-2">
-                <p className="text-sm font-medium text-gray-900">Pix Copia e Cola</p>
-                {cobranca.qrCodeBase64 && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={`data:image/png;base64,${cobranca.qrCodeBase64}`}
-                    alt="QR Code Pix"
-                    className="w-40 h-40 border border-gray-200 rounded-md"
-                  />
-                )}
-                <div className="flex items-start gap-2">
-                  <textarea
-                    readOnly
-                    value={cobranca.qrCode}
-                    rows={3}
-                    className="input text-xs font-mono flex-1"
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <CopyButton value={cobranca.qrCode} label="Copiar código" />
-                </div>
-              </div>
-            )}
-
-            {cobranca.tipo === "BOLETO" && cobranca.linhaDigitavel && (
-              <div className="border-t pt-4 space-y-2">
-                <p className="text-sm font-medium text-gray-900">Linha digitável</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={cobranca.linhaDigitavel}
-                    className="input text-xs font-mono flex-1"
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <CopyButton value={cobranca.linhaDigitavel} />
-                </div>
-                {cobranca.linkPagamento && (
-                  <a
-                    href={cobranca.linkPagamento}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-secondary text-sm inline-block"
-                  >
-                    Abrir boleto
-                  </a>
-                )}
-              </div>
-            )}
-
-            {cobranca.tipo === "CARTAO_LINK" && cobranca.linkPagamento && (
-              <div className="border-t pt-4 space-y-2">
-                <p className="text-sm font-medium text-gray-900">Link de pagamento</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    readOnly
-                    value={cobranca.linkPagamento}
-                    className="input text-xs flex-1"
-                    onFocus={(e) => e.currentTarget.select()}
-                  />
-                  <CopyButton value={cobranca.linkPagamento} />
-                </div>
-                <a
-                  href={cobranca.linkPagamento}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary text-sm inline-block"
-                >
-                  Abrir link de pagamento
-                </a>
-              </div>
-            )}
-
-            {cobranca.status === "PENDENTE" && (
-              <div className="border-t pt-4 flex flex-wrap gap-3">
-                <form action={marcarCobrancaPaga.bind(null, cobranca.id)}>
-                  <button type="submit" className="btn-secondary text-sm">Marcar paga</button>
-                </form>
-                {cobranca.mercadoPagoId && (
-                  <form action={verificarPagamentoAction.bind(null, cobranca.id)}>
-                    <button type="submit" className="btn-secondary text-sm">Verificar pagamento agora</button>
-                  </form>
-                )}
-                <a
-                  href={linkWhatsapp(
-                    venda.cliente.telefone,
-                    mensagemCobrancaWhatsapp({
-                      clienteNome: venda.cliente.nome,
-                      valor: Number(cobranca.valor),
-                      tipo: cobranca.tipo,
-                      linkOuCodigo: cobranca.linkPagamento || cobranca.qrCode,
-                    })
-                  )}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary text-sm"
-                >
-                  Abrir no WhatsApp
-                </a>
-              </div>
-            )}
-          </div>
+          <CobrancaPainel
+            cobranca={{ ...cobranca, valor: Number(cobranca.valor) }}
+            clienteNome={venda.cliente.nome}
+            clienteTelefone={venda.cliente.telefone}
+            marcarPagaAction={marcarCobrancaPaga.bind(null, cobranca.id)}
+            verificarPagamentoAction={verificarPagamentoAction.bind(null, cobranca.id)}
+            avisoFalhaGeracao="Não foi possível gerar essa cobrança no Mercado Pago (token não configurado ou chamada falhou). Confira as credenciais em /configuracoes — depois disso é preciso registrar uma nova venda, esta cobrança não tem como ser regerada automaticamente."
+          />
         )}
       </div>
     </div>

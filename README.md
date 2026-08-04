@@ -88,15 +88,18 @@ opcional para `SUPER_ADMIN`) · `ConviteUsuario` (token de definição de
 senha) — e, escopados por `empresaId`: `Cliente` → `Animal` (1:N) · `Canil`
 ↔ `Hospedagem` ↔ `Animal` · `Produto` / `Servico` (catálogo) · `Plano`
 (template mensal) → `PlanoItem` · `Assinatura` (cliente + plano =
-"mensalista") · `Venda` → `ItemVenda` · `Cobranca` (boleto/Pix/link) ·
-`ContaPagar` / `ContaReceber` · `Agendamento`.
+"mensalista") · `Venda` → `ItemVenda` · `Cobranca` (boleto/Pix/link — de uma
+`Venda` avulsa OU consolidada de uma `Assinatura`, ver "Faturamento mensal")
+· `ContaPagar` / `ContaReceber` · `Agendamento`.
 
 **Como funciona "alguns clientes são mensalistas, outros não":** não existe
 um campo booleano fixo no `Cliente`. Um cliente vira mensalista ao ganhar
 uma `Assinatura` ativa a um `Plano`. Na tela de Vendas, ao escolher a forma
 de pagamento "Mensalista", a venda é debitada da assinatura (sem gerar
-cobrança nova); qualquer outra forma de pagamento segue o fluxo avulso
-normal.
+cobrança nova); com "Lançar na fatura mensal" a venda fica pendente
+(`faturaCobrancaId` nulo) até entrar numa fatura consolidada — ver seção
+"Faturamento mensal" abaixo; qualquer outra forma de pagamento segue o
+fluxo avulso normal (cobrança gerada e cobrada na hora).
 
 **Nota sobre `Venda.numero`:** é uma sequência global (autoincrement do
 Postgres), não por empresa — o petshop A pode ter a venda #47 e o petshop B
@@ -175,6 +178,68 @@ entrega, ganha zero setup e zero risco de bloqueio/custo por mensagem. Se
 o volume justificar mais adiante, dá pra reintroduzir a Cloud API (ou um
 BSP tipo Twilio/360dialog) como opção adicional, não como substituição.
 
+## Faturamento mensal (mensalistas)
+
+Problema que essa feature resolve: um cliente é mensalista (tem `Assinatura`
+ativa) e, durante o mês, também compra coisas avulsas (ex: um shampoo). Antes
+não existia lugar nenhum pra esse consumo aparecer — agora ele pode ser
+lançado como "notinha" e entrar numa fatura única no fim do mês, em vez de
+virar uma cobrança avulsa isolada.
+
+**Modelagem — reaproveita `Cobranca`, não é um model novo.** Uma fatura
+mensal é uma `Cobranca` normal com `assinaturaId` preenchido e `vendaId`
+nulo (o inverso da cobrança de uma venda avulsa comum, que tem `vendaId` e
+`assinaturaId` nulo). `@@unique([assinaturaId, referenciaMes])` no banco
+garante que não existam duas faturas do mesmo mês pra mesma assinatura —
+trava de banco, não só de aplicação (Postgres não colide `NULL`, então essa
+constraint não afeta as `Cobranca`s de venda avulsa, que têm `assinaturaId`
+nulo).
+
+**Fluxo de uma venda avulsa de um mensalista:**
+1. Na tela de Vendas, forma de pagamento **"Lançar na fatura mensal"**
+   (`A_FATURAR`) — a venda é criada normalmente (baixa estoque, etc.), mas
+   sem gerar cobrança própria; fica marcada como pendente de fatura
+   (`Venda.faturaCobrancaId = null`).
+2. Em **Faturamento mensal** (`/planos/faturamento`) você vê, por
+   assinatura ativa, a prévia do mês: mensalidade + soma das vendas
+   pendentes = total. Um clique em "Gerar fatura" cria a `Cobranca`
+   consolidada (Pix, vencimento em 3 dias) e marca todas as vendas incluídas
+   com o `faturaCobrancaId` dela — a partir daí elas não entram mais em
+   nenhuma fatura futura.
+3. A tela de detalhe da fatura (`/planos/faturamento/<cobrancaId>`) mostra a
+   composição (mensalidade + cada venda, com link pra venda original) e o
+   mesmo painel de cobrança (Pix/QR/link, marcar paga, verificar pagamento,
+   abrir no WhatsApp) usado na venda avulsa.
+4. Se o cliente quiser pagar a compra avulsa na hora em vez de esperar a
+   fatura, é só usar qualquer outra forma de pagamento (Pix, cartão etc.) —
+   vira uma venda avulsa normal, fora da fatura. As duas opções convivem.
+
+**Geração automática (cron):** cada `Assinatura` tem seu próprio
+`diaCobranca`. Um endpoint protegido, `POST /api/cron/gerar-faturas-mensais`,
+roda **todo dia** (não uma vez por mês fixo) e gera a fatura de toda
+assinatura ativa cujo `diaCobranca` seja hoje, em todas as empresas. É
+idempotente (não duplica se rodar mais de uma vez no mesmo dia, tanto por
+checagem na aplicação quanto pela constraint única do banco).
+
+**Este ambiente não provisiona infraestrutura — você precisa criar o Cron
+Job manualmente no Render depois do deploy:**
+1. Gere um segredo forte: mesmo comando do `ENCRYPTION_KEY`
+   (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
+2. Defina `CRON_SECRET` com esse valor em **duas envs**: no serviço web
+   (mesmo lugar de `DATABASE_URL` etc.) e no Cron Job que você vai criar a
+   seguir — precisam ser idênticos.
+3. No Render: **New → Cron Job**, mesmo repositório/branch do serviço web.
+   - **Schedule:** `0 6 * * *` (todo dia às 6h — ajuste o horário à vontade,
+     é isso que define quando as faturas do dia são geradas).
+   - **Command:**
+     ```
+     curl -fsS -X POST https://SEU-DOMINIO/api/cron/gerar-faturas-mensais \
+       -H "Authorization: Bearer $CRON_SECRET"
+     ```
+4. Sem esse Cron Job configurado, o sistema não quebra: a geração manual
+   pela tela de Faturamento mensal continua funcionando normalmente, só não
+   acontece sozinha.
+
 ## Decisões de arquitetura e trade-offs (autocrítica)
 
 - **Isolamento por `empresaId` num banco único, não por banco físico.** Ver
@@ -189,10 +254,16 @@ BSP tipo Twilio/360dialog) como opção adicional, não como substituição.
   órfão; cliente sem histórico pode ser removido de fato.
 - **Preço recalculado no servidor** em `vendas/actions.ts`: o formulário
   manda apenas `produtoId`/`servicoId` + quantidade, nunca o preço.
-- **Sem fila/job assíncrono para cobrança recorrente de mensalistas.** A
-  criação da cobrança mensal de cada `Assinatura` não está automatizada —
-  próximo passo natural, via cron, criando uma `Cobranca` por assinatura
-  ativa no dia configurado.
+- **Cron do faturamento mensal é um endpoint HTTP chamado externamente, não
+  um job/fila interno.** Optei por não introduzir infraestrutura de fila
+  (BullMQ, etc.) só pra rodar uma vez por dia — um Route Handler protegido
+  por `CRON_SECRET`, chamado por um Cron Job externo (Render), resolve o
+  caso de uso sem dependência nova. **Risco residual:** se o Cron Job
+  externo falhar silenciosamente (não configurado, `CRON_SECRET` errado,
+  domínio errado), a fatura daquele dia simplesmente não é gerada — não há
+  alerta automático hoje; a tela `/planos/faturamento` sempre permite gerar
+  manualmente como fallback, mas vale monitorar os logs do Cron Job de vez
+  em quando.
 - **Sem testes automatizados.** Para um CRM financeiro multi-tenant, o item
   de maior risco pendente é não ter testes de integração cobrindo
   `createVenda` (cálculo de total, baixa de estoque, geração de cobrança,
@@ -205,11 +276,12 @@ BSP tipo Twilio/360dialog) como opção adicional, não como substituição.
 ## Roadmap sugerido
 
 1. **Agora:** validar o fluxo de cadastro de petshop-cliente + convite +
-   login ponta a ponta com dados reais.
-2. **Próximo:** cron de cobrança recorrente de mensalistas. Lembrete de
-   agendamento por WhatsApp automático (sem humano clicando) exigiria voltar
-   a ter alguma integração (Cloud API ou BSP) — hoje o link direto não cobre
-   esse caso, só envio sob demanda.
+   login ponta a ponta com dados reais; configurar o Cron Job do
+   faturamento mensal no Render (ver seção "Faturamento mensal" — passo
+   manual, não é criado automaticamente).
+2. **Próximo:** lembrete de agendamento por WhatsApp automático (sem humano
+   clicando) exigiria voltar a ter alguma integração (Cloud API ou BSP) —
+   hoje o link direto não cobre esse caso, só envio sob demanda.
 3. **Depois:** self-service (petshop-cliente convida os próprios atendentes,
    sem passar por você), testes automatizados no fluxo financeiro,
    relatórios entre empresas (uso, faturamento da plataforma).

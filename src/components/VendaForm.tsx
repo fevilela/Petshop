@@ -25,7 +25,10 @@ const FORMAS_PAGAMENTO: { value: string; label: string }[] = [
   { value: "BOLETO", label: "Boleto (Mercado Pago)" },
   { value: "CARTAO_LINK", label: "Link de pagamento (Mercado Pago)" },
   { value: "MENSALISTA", label: "Mensalista (debitar do plano)" },
+  { value: "A_FATURAR", label: "Lançar na fatura mensal (mensalista, cobra depois)" },
 ];
+
+const FORMAS_QUE_EXIGEM_ASSINATURA = new Set(["MENSALISTA", "A_FATURAR"]);
 
 export default function VendaForm({
   action,
@@ -123,7 +126,7 @@ export default function VendaForm({
           </select>
         </div>
 
-        {formaPagamento === "MENSALISTA" && (
+        {FORMAS_QUE_EXIGEM_ASSINATURA.has(formaPagamento) && (
           <div>
             <label className="label" htmlFor="assinaturaId">Assinatura do cliente *</label>
             <select

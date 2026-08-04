@@ -68,6 +68,7 @@ enum FormaPagamento {
   PIX_MERCADOPAGO
   CARTAO_LINK
   MENSALISTA
+  A_FATURAR // compra avulsa de um mensalista, lançada na fatura mensal em vez de paga na hora
 }
 
 enum StatusVenda {
@@ -362,7 +363,7 @@ model Venda {
   cliente         Cliente        @relation(fields: [clienteId], references: [id])
   animalId        String?
   animal          Animal?        @relation(fields: [animalId], references: [id])
-  assinaturaId    String?        // preenchido quando debitado de uma mensalidade
+  assinaturaId    String?        // preenchido quando debitado de uma mensalidade OU lançado na fatura (A_FATURAR)
   assinatura      Assinatura?    @relation(fields: [assinaturaId], references: [id])
   formaPagamento  FormaPagamento
   valorTotal      Decimal        @db.Decimal(10, 2)
@@ -372,12 +373,21 @@ model Venda {
   criadoPor       Usuario?       @relation("VendaCriadoPor", fields: [criadoPorId], references: [id])
   createdAt       DateTime       @default(now())
 
-  itens           ItemVenda[]
-  cobranca        Cobranca?
+  itens             ItemVenda[]
+  cobranca          Cobranca?
+
+  // Preenchido quando esta venda (formaPagamento = A_FATURAR) já foi
+  // incluída numa fatura mensal consolidada — impede cobrar a mesma venda
+  // avulsa duas vezes. Relação nomeada porque é diferente da relação 1:1
+  // `cobranca` acima (uma Cobranca "de venda" vs. uma Cobranca "de fatura"
+  // que agrupa várias vendas).
+  faturaCobrancaId String?
+  faturaCobranca    Cobranca?    @relation("VendaFaturada", fields: [faturaCobrancaId], references: [id])
 
   @@index([empresaId])
   @@index([clienteId])
   @@index([createdAt])
+  @@index([faturaCobrancaId])
 }
 
 // Linha de item de uma Venda. NÃO tem empresaId próprio: só existe aninhada
@@ -424,9 +434,19 @@ model Cobranca {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
+  // Vendas avulsas (formaPagamento = A_FATURAR) consolidadas nesta cobrança,
+  // quando ela é uma fatura mensal (assinaturaId setado, vendaId nulo).
+  vendasFaturadas  Venda[]        @relation("VendaFaturada")
+
   @@index([empresaId])
   @@index([status])
   @@index([assinaturaId])
+  // Garante no banco (não só na aplicação) que nunca existem duas faturas
+  // consolidadas pra mesma assinatura no mesmo mês — proteção real contra
+  // cobrança duplicada se o cron rodar mais de uma vez. NULLs não colidem
+  // entre si no Postgres, então isso não afeta cobranças de venda avulsa
+  // (assinaturaId/referenciaMes nulos nesse caso).
+  @@unique([assinaturaId, referenciaMes])
 }
 
 model ContaPagar {

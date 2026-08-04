@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { marcarCobrancaPaga } from "./actions";
-import { FORMA_LABEL, COBRANCA_BADGE } from "./labels";
+import { FORMA_LABEL, COBRANCA_BADGE } from "@/lib/cobranca-labels";
 
 export default async function VendasPage() {
   const { prisma } = await getSessionTenantPrisma();

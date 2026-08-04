@@ -6,7 +6,8 @@ import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao, consultarPagamento } from "@/lib/mercadopago";
+import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
+import { verificarPagamentoCobranca } from "@/lib/cobranca";
 
 const itemSchema = z.object({
   tipo: z.enum(["PRODUTO", "SERVICO"]),
@@ -26,6 +27,7 @@ const vendaSchema = z.object({
     "PIX_MERCADOPAGO",
     "CARTAO_LINK",
     "MENSALISTA",
+    "A_FATURAR",
   ]),
   assinaturaId: z.string().optional(),
   observacoes: z.string().optional(),
@@ -34,6 +36,13 @@ const vendaSchema = z.object({
 
 /** Formas de pagamento que exigem gerar uma Cobrança (boleto/pix/link) via Mercado Pago. */
 const FORMAS_COM_COBRANCA = ["BOLETO", "PIX_MERCADOPAGO", "CARTAO_LINK"] as const;
+
+/**
+ * MENSALISTA: item incluso no plano, nunca cobrado. A_FATURAR: item extra
+ * de um mensalista, não pago na hora — acumula pra fatura mensal (ver
+ * src/lib/faturamento.ts). As duas exigem uma assinatura ativa do cliente.
+ */
+const FORMAS_QUE_EXIGEM_ASSINATURA = new Set(["MENSALISTA", "A_FATURAR"]);
 
 export async function createVenda(formData: FormData) {
   const { prisma, empresaId, usuarioId } = await getSessionTenantPrisma();
@@ -49,8 +58,8 @@ export async function createVenda(formData: FormData) {
 
   const itensInput = z.array(itemSchema).min(1, "Adicione ao menos um item").parse(JSON.parse(parsed.itensJson));
 
-  if (parsed.formaPagamento === "MENSALISTA" && !parsed.assinaturaId) {
-    throw new Error("Selecione a assinatura do cliente para debitar da mensalidade.");
+  if (FORMAS_QUE_EXIGEM_ASSINATURA.has(parsed.formaPagamento) && !parsed.assinaturaId) {
+    throw new Error("Selecione a assinatura do cliente.");
   }
 
   // Toda referência a outro registro (cliente, animal, assinatura) é
@@ -72,7 +81,7 @@ export async function createVenda(formData: FormData) {
     }
   }
 
-  if (parsed.formaPagamento === "MENSALISTA") {
+  if (FORMAS_QUE_EXIGEM_ASSINATURA.has(parsed.formaPagamento)) {
     await prisma.assinatura.findUniqueOrThrow({ where: { id: parsed.assinaturaId! } });
   }
 
@@ -117,7 +126,7 @@ export async function createVenda(formData: FormData) {
         empresaId,
         clienteId: parsed.clienteId,
         animalId: parsed.animalId || undefined,
-        assinaturaId: parsed.formaPagamento === "MENSALISTA" ? parsed.assinaturaId : undefined,
+        assinaturaId: FORMAS_QUE_EXIGEM_ASSINATURA.has(parsed.formaPagamento) ? parsed.assinaturaId : undefined,
         formaPagamento: parsed.formaPagamento,
         valorTotal,
         observacoes: parsed.observacoes,
@@ -235,37 +244,7 @@ export async function verificarPagamentoAction(cobrancaId: string) {
   const { prisma, empresaId } = await getSessionTenantPrisma();
   const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
 
-  if (cobranca.status !== "PENDENTE" || !cobranca.mercadoPagoId) {
-    revalidatePath("/vendas");
-    return;
-  }
-
-  try {
-    const empresa = await sharedPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
-    if (!empresa.mercadoPagoAccessTokenEnc) {
-      throw new Error("Mercado Pago não configurado para esta empresa.");
-    }
-    const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
-    const pagamento = await consultarPagamento(accessToken, cobranca.mercadoPagoId);
-
-    if (pagamento.status === "approved") {
-      await prisma.cobranca.update({
-        where: { id: cobrancaId },
-        data: {
-          status: "PAGO",
-          dataPagamento: pagamento.date_approved ? new Date(pagamento.date_approved) : new Date(),
-        },
-      });
-    } else if (pagamento.status === "cancelled" || pagamento.status === "rejected") {
-      await prisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
-    }
-    // Se ainda estiver "pending"/"in_process" no Mercado Pago, não fazemos
-    // nada — a cobrança continua PENDENTE, o que já é o estado correto.
-  } catch (err) {
-    // Não relançamos: uma falha na checagem manual não deve quebrar a tela
-    // de vendas para o atendente, só não atualiza nada desta vez.
-    console.error("Falha ao verificar pagamento manualmente:", err);
-  }
+  await verificarPagamentoCobranca(empresaId, cobrancaId);
 
   revalidatePath("/vendas");
   if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);

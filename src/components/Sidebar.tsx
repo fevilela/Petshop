@@ -31,6 +31,7 @@ const NAV: NavItem[] = [
       { href: "/canil", label: "Canil / Hospedagem", modulo: "canil" },
       { href: "/produtos-servicos", label: "Produtos & Serviços", modulo: "produtos_servicos" },
       { href: "/planos", label: "Planos (Mensalistas)", modulo: "planos" },
+      { href: "/planos/faturamento", label: "Faturamento mensal", modulo: "planos" },
     ],
   },
   { type: "link", href: "/agenda", label: "Agenda", icon: "📅", modulo: "agenda" },
