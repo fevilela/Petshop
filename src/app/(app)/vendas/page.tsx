@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { marcarCobrancaPaga, enviarCobrancaWhatsapp } from "./actions";
+import { marcarCobrancaPaga } from "./actions";
 import { FORMA_LABEL, COBRANCA_BADGE } from "./labels";
 
 export default async function VendasPage() {
@@ -53,14 +53,9 @@ export default async function VendasPage() {
                 <td className="text-gray-500">{formatDateTime(v.createdAt)}</td>
                 <td className="text-right space-x-3 whitespace-nowrap">
                   {v.cobranca && v.cobranca.status === "PENDENTE" && (
-                    <>
-                      <form action={marcarCobrancaPaga.bind(null, v.cobranca.id)} className="inline">
-                        <button type="submit" className="text-sm text-green-700 hover:underline">Marcar paga</button>
-                      </form>
-                      <form action={enviarCobrancaWhatsapp.bind(null, v.cobranca.id)} className="inline">
-                        <button type="submit" className="text-sm text-brand-700 hover:underline">Enviar WhatsApp</button>
-                      </form>
-                    </>
+                    <form action={marcarCobrancaPaga.bind(null, v.cobranca.id)} className="inline">
+                      <button type="submit" className="text-sm text-green-700 hover:underline">Marcar paga</button>
+                    </form>
                   )}
                   <Link href={`/vendas/${v.id}`} className="text-sm text-gray-500 hover:underline">
                     Ver

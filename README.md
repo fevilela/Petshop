@@ -2,13 +2,13 @@
 
 CRM para petshop + hotelzinho — cadastros de clientes, animais, canil,
 produtos e serviços, agenda, vendas (avulsas e mensalistas), financeiro
-(contas a pagar/receber) e cobrança via Mercado Pago com envio automático
-pelo WhatsApp.
+(contas a pagar/receber) e cobrança via Mercado Pago com envio pelo WhatsApp
+(link direto, sem integração/credencial nenhuma).
 
 Este não é mais um sistema single-tenant para um único petshop: é a base de
 um **SaaS** — você (Fernanda) cadastra petshops-clientes, cada um com login e
-credenciais próprias de Mercado Pago/WhatsApp, e opera tudo a partir de uma
-área `/admin`.
+credencial própria de Mercado Pago, e opera tudo a partir de uma área
+`/admin`.
 
 ## Stack e por quê
 
@@ -18,8 +18,9 @@ credenciais próprias de Mercado Pago/WhatsApp, e opera tudo a partir de uma
 - **NextAuth (Credentials + JWT)** — login de e-mail/senha; a sessão carrega
   `role` (`SUPER_ADMIN` / `EMPRESA_ADMIN` / `EMPRESA_ATENDENTE`) e `empresaId`.
 - **Server Actions em vez de API REST própria.**
-- **Zero SDKs pesados para integrações externas** — `lib/mercadopago.ts` e
-  `lib/whatsapp.ts` usam `fetch` direto contra as APIs REST.
+- **Zero SDKs pesados para integrações externas** — `lib/mercadopago.ts`
+  usa `fetch` direto contra a API REST. WhatsApp não tem integração: é link
+  direto (`wa.me`), ver seção própria abaixo.
 
 ## Arquitetura multi-tenant: banco único, isolado por `empresaId`
 
@@ -75,10 +76,10 @@ admin do petshop pode então pedir para você criar acessos adicionais
 (atendentes) — ainda sem self-service.
 
 **Credenciais por petshop:** cada empresa configura seu próprio token do
-Mercado Pago e credenciais do WhatsApp Business em `/configuracoes` (só
-`EMPRESA_ADMIN` vê/edita). Ficam criptografadas (AES-256-GCM,
-`src/lib/crypto.ts`) na tabela `Empresa`. O webhook do Mercado Pago é por
-tenant: `/api/webhooks/mercadopago/[empresaId]`.
+Mercado Pago em `/configuracoes` (só `EMPRESA_ADMIN` vê/edita). Fica
+criptografado (AES-256-GCM, `src/lib/crypto.ts`) na tabela `Empresa`. O
+webhook do Mercado Pago é por tenant: `/api/webhooks/mercadopago/[empresaId]`.
+WhatsApp não precisa de credencial — ver seção própria abaixo.
 
 ## Modelo de dados (resumo)
 
@@ -88,7 +89,7 @@ senha) — e, escopados por `empresaId`: `Cliente` → `Animal` (1:N) · `Canil`
 ↔ `Hospedagem` ↔ `Animal` · `Produto` / `Servico` (catálogo) · `Plano`
 (template mensal) → `PlanoItem` · `Assinatura` (cliente + plano =
 "mensalista") · `Venda` → `ItemVenda` · `Cobranca` (boleto/Pix/link) ·
-`ContaPagar` / `ContaReceber` · `Agendamento` · `WhatsappMensagem` (log).
+`ContaPagar` / `ContaReceber` · `Agendamento`.
 
 **Como funciona "alguns clientes são mensalistas, outros não":** não existe
 um campo booleano fixo no `Cliente`. Um cliente vira mensalista ao ganhar
@@ -137,35 +138,42 @@ IPv6-only e não funciona a partir do Render/Vercel).
    provisionamento) e o usuário `EMPRESA_ADMIN`, e manda o e-mail de convite.
 3. O responsável clica no link, define a senha (`/convite/[token]`), e já
    consegue logar.
-4. Ele mesmo (ou você, a pedido dele) configura Mercado Pago e WhatsApp em
+4. Ele mesmo (ou você, a pedido dele) configura o Mercado Pago em
    `/configuracoes`, e pode pedir a você para criar acessos de atendente.
+   WhatsApp não precisa de configuração nenhuma (ver seção abaixo).
 
-## Mercado Pago e WhatsApp (por petshop)
+## Mercado Pago (por petshop) e WhatsApp (link direto)
 
-Cada petshop-cliente configura as próprias credenciais em `/configuracoes`
-(não são mais env vars globais):
-
-**Mercado Pago**
+**Mercado Pago** — cada petshop-cliente configura o próprio token em
+`/configuracoes` (não é mais env var global):
 1. O responsável cria uma aplicação em
    [mercadopago.com.br/developers/panel](https://www.mercadopago.com.br/developers/panel)
    e cola o Access Token de produção em `/configuracoes`.
-2. Configura a URL de notificações mostrada na própria tela
-   (`https://seu-dominio/api/webhooks/mercadopago/<empresaId>`) no painel de
-   Webhooks do Mercado Pago dele — é isso que atualiza `Cobranca.status`
-   para `PAGO` automaticamente.
+2. `notification_url` já é enviada automaticamente em toda cobrança criada
+   (Pix, boleto, link) apontando pro webhook desta empresa
+   (`/api/webhooks/mercadopago/<empresaId>`) — não precisa configurar nada
+   manualmente no painel do Mercado Pago para isso funcionar. A URL também
+   aparece pronta em `/configuracoes`, caso quiera configurar manualmente
+   como reforço.
 
-**WhatsApp Cloud API**
-1. Cria um app em [developers.facebook.com](https://developers.facebook.com/apps)
-   com o produto WhatsApp e cola `Phone Number ID` / `Access Token` em
-   `/configuracoes`.
-2. **Precisa criar e aprovar um template de mensagem** chamado
-   `cobranca_disponivel` no WhatsApp Manager (obrigatório pela Meta para
-   iniciar conversa fora da janela de 24h), com corpo parecido com:
-   `"Olá {{1}}, sua cobrança de R$ {{2}} ({{3}}) está disponível: {{4}}"`.
+Sem o token configurado, o sistema **não quebra**: a venda é criada
+normalmente, a cobrança fica pendente sem link/QR Code (avisado na tela de
+detalhe da venda).
 
-Sem essas credenciais configuradas, o sistema **não quebra**: a venda é
-criada normalmente, a cobrança fica pendente sem link/QR Code, e o botão de
-WhatsApp registra a falha no log (`WhatsappMensagem`) sem travar a tela.
+**WhatsApp** — não tem integração/API nenhuma, de propósito. O envio da
+cobrança é por link direto (`wa.me/<telefone>?text=...`, ver
+`src/lib/utils.ts`/`linkWhatsapp`): o botão "Abrir no WhatsApp" na tela da
+venda já monta a mensagem e abre o WhatsApp (app ou web) de quem clicar,
+pronto pra revisar e enviar. Chegamos a implementar a WhatsApp Cloud API
+oficial da Meta (template aprovado, Phone Number ID, Business Account ID,
+Access Token por empresa) e removemos: pra um SaaS com vários
+petshops-clientes, cada um teria que passar pela verificação de negócio e
+aprovação de template da Meta antes de conseguir mandar a primeira
+cobrança — fricção grande demais pro estágio atual. **Trade-off assumido:**
+perde o envio 100% automático (sem humano no loop) e o rastreamento de
+entrega, ganha zero setup e zero risco de bloqueio/custo por mensagem. Se
+o volume justificar mais adiante, dá pra reintroduzir a Cloud API (ou um
+BSP tipo Twilio/360dialog) como opção adicional, não como substituição.
 
 ## Decisões de arquitetura e trade-offs (autocrítica)
 
@@ -198,8 +206,10 @@ WhatsApp registra a falha no log (`WhatsappMensagem`) sem travar a tela.
 
 1. **Agora:** validar o fluxo de cadastro de petshop-cliente + convite +
    login ponta a ponta com dados reais.
-2. **Próximo:** cron de cobrança recorrente de mensalistas + lembretes de
-   agendamento por WhatsApp.
+2. **Próximo:** cron de cobrança recorrente de mensalistas. Lembrete de
+   agendamento por WhatsApp automático (sem humano clicando) exigiria voltar
+   a ter alguma integração (Cloud API ou BSP) — hoje o link direto não cobre
+   esse caso, só envio sob demanda.
 3. **Depois:** self-service (petshop-cliente convida os próprios atendentes,
    sem passar por você), testes automatizados no fluxo financeiro,
    relatórios entre empresas (uso, faturamento da plataforma).

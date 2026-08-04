@@ -1,6 +1,6 @@
 /**
  * Envio de e-mail via Resend (API REST direta, sem SDK — mesmo padrão usado
- * em lib/mercadopago.ts e lib/whatsapp.ts).
+ * em lib/mercadopago.ts).
  *
  * Requer no .env: RESEND_API_KEY e RESEND_FROM_EMAIL (precisa ser um
  * domínio verificado na Resend, ver resend.com/domains).

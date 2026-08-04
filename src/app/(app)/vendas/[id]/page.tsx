@@ -4,7 +4,7 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
 import CopyButton from "@/components/CopyButton";
 import { FORMA_LABEL, COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "../labels";
-import { marcarCobrancaPaga, enviarCobrancaWhatsapp, verificarPagamentoAction } from "../actions";
+import { marcarCobrancaPaga, verificarPagamentoAction } from "../actions";
 
 /** Formas de pagamento que deveriam ter gerado uma Cobrança via Mercado Pago. */
 const FORMAS_COM_COBRANCA = ["BOLETO", "PIX_MERCADOPAGO", "CARTAO_LINK"];
@@ -200,12 +200,6 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
               </div>
             )}
 
-            {cobranca.enviadoWhatsappEm && (
-              <p className="text-xs text-gray-400">
-                Enviado por WhatsApp em {formatDateTime(cobranca.enviadoWhatsappEm)}.
-              </p>
-            )}
-
             {cobranca.status === "PENDENTE" && (
               <div className="border-t pt-4 flex flex-wrap gap-3">
                 <form action={marcarCobrancaPaga.bind(null, cobranca.id)}>
@@ -232,9 +226,6 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
                 >
                   Abrir no WhatsApp
                 </a>
-                <form action={enviarCobrancaWhatsapp.bind(null, cobranca.id)}>
-                  <button type="submit" className="btn-secondary text-sm">Enviar automático (Cloud API)</button>
-                </form>
               </div>
             )}
           </div>

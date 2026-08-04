@@ -101,18 +101,13 @@ enum StatusConta {
   CANCELADO
 }
 
-enum StatusWhatsapp {
-  PENDENTE
-  ENVIADO
-  FALHA
-}
-
 // ---------- Plataforma (dados da própria SaaS, não de um petshop) ----------
 
 // Um petshop-cliente que assina o SaaS. Cada Empresa usa o MESMO banco que
 // todas as outras (isolamento por `empresaId`, não por banco físico) e tem
-// suas próprias credenciais de Mercado Pago / WhatsApp — nunca compartilhadas
-// entre empresas.
+// suas próprias credenciais de Mercado Pago — nunca compartilhadas entre
+// empresas. Envio de cobrança por WhatsApp é feito via link direto (wa.me),
+// que não depende de nenhuma credencial própria da empresa (ver README).
 model Empresa {
   id                        String        @id @default(cuid())
   nome                      String
@@ -121,11 +116,8 @@ model Empresa {
   emailResponsavel          String
   status                    StatusEmpresa @default(ATIVA)
 
-  // Credenciais próprias do petshop (cobrança e WhatsApp)
+  // Credencial própria do petshop (cobrança via Mercado Pago)
   mercadoPagoAccessTokenEnc String?
-  whatsappPhoneNumberId     String?
-  whatsappBusinessAccountId String?
-  whatsappAccessTokenEnc    String?
 
   // Módulos habilitados para esta empresa (liga/desliga telas inteiras, ex:
   // um petshop sem hotelzinho não precisa de Canil/Hospedagem). Controla o
@@ -202,7 +194,6 @@ model Cliente {
   assinaturas   Assinatura[]
   agendamentos  Agendamento[]
   contasReceber ContaReceber[]
-  whatsappMsgs  WhatsappMensagem[]
 
   @@index([empresaId])
   @@index([empresaId, nome])
@@ -430,11 +421,8 @@ model Cobranca {
   linhaDigitavel   String?        // boleto
   dataVencimento   DateTime
   dataPagamento    DateTime?
-  enviadoWhatsappEm DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-
-  whatsappMsgs     WhatsappMensagem[]
 
   @@index([empresaId])
   @@index([status])
@@ -498,25 +486,5 @@ model Agendamento {
 
   @@index([empresaId])
   @@index([dataHoraInicio])
-  @@index([status])
-}
-
-// Log de mensagens enviadas via WhatsApp (cobranças, lembretes, etc.)
-model WhatsappMensagem {
-  id          String          @id @default(cuid())
-  empresaId   String
-  clienteId   String
-  cliente     Cliente         @relation(fields: [clienteId], references: [id])
-  cobrancaId  String?
-  cobranca    Cobranca?       @relation(fields: [cobrancaId], references: [id])
-  telefone    String
-  tipo        String          // cobranca_boleto, cobranca_pix, lembrete_agendamento...
-  status      StatusWhatsapp  @default(PENDENTE)
-  mensagemId  String?         // id retornado pela Meta Cloud API
-  erro        String?
-  createdAt   DateTime        @default(now())
-
-  @@index([empresaId])
-  @@index([clienteId])
   @@index([status])
 }

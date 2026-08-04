@@ -1,9 +1,9 @@
 import crypto from "crypto";
 
 /**
- * Criptografia simétrica (AES-256-GCM) para guardar segredos no banco de
- * controle: connection strings de cada empresa, tokens de Mercado Pago e
- * WhatsApp de cada empresa. Nunca guardamos esses valores em texto puro.
+ * Criptografia simétrica (AES-256-GCM) para guardar segredos no banco:
+ * token de Mercado Pago de cada empresa, entre outros. Nunca guardamos
+ * esses valores em texto puro.
  *
  * Formato armazenado: "<iv-base64>.<authTag-base64>.<dados-base64>"
  */

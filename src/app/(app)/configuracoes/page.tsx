@@ -16,7 +16,7 @@ export default async function ConfiguracoesPage() {
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Configurações</h1>
         <p className="text-sm text-gray-500">
-          Credenciais próprias do {empresa.nome} para gerar cobranças e enviar mensagens de WhatsApp.
+          Credencial própria do {empresa.nome} para gerar cobranças no Mercado Pago.
         </p>
       </div>
 
@@ -51,41 +51,11 @@ export default async function ConfiguracoesPage() {
         </div>
 
         <div className="border-t pt-4">
-          <h2 className="font-medium text-gray-900 mb-2">WhatsApp Cloud API</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="label" htmlFor="whatsappPhoneNumberId">Phone Number ID</label>
-              <input
-                id="whatsappPhoneNumberId"
-                name="whatsappPhoneNumberId"
-                className="input"
-                defaultValue={empresa.whatsappPhoneNumberId ?? ""}
-                disabled={somenteLeitura}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="whatsappBusinessAccountId">Business Account ID</label>
-              <input
-                id="whatsappBusinessAccountId"
-                name="whatsappBusinessAccountId"
-                className="input"
-                defaultValue={empresa.whatsappBusinessAccountId ?? ""}
-                disabled={somenteLeitura}
-              />
-            </div>
-            <div>
-              <label className="label" htmlFor="whatsappAccessToken">Access Token</label>
-              <input
-                id="whatsappAccessToken"
-                name="whatsappAccessToken"
-                className="input"
-                placeholder={empresa.whatsappAccessTokenEnc ? "•••••••• (configurado — digite para trocar)" : ""}
-                disabled={somenteLeitura}
-              />
-            </div>
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            Obtenha em developers.facebook.com, criando um app com o produto WhatsApp.
+          <h2 className="font-medium text-gray-900 mb-2">WhatsApp</h2>
+          <p className="text-sm text-gray-500">
+            O envio de cobrança por WhatsApp é feito por link direto (wa.me) na tela da venda — não
+            precisa configurar nenhuma credencial aqui. O sistema já sabe o telefone de cada
+            cliente cadastrado.
           </p>
         </div>
 

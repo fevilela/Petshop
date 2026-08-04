@@ -9,9 +9,6 @@ import { encrypt } from "@/lib/crypto";
 
 const configSchema = z.object({
   mercadoPagoAccessToken: z.string().optional(),
-  whatsappPhoneNumberId: z.string().optional(),
-  whatsappBusinessAccountId: z.string().optional(),
-  whatsappAccessToken: z.string().optional(),
 });
 
 /**
@@ -31,18 +28,12 @@ export async function atualizarConfiguracoesAction(formData: FormData) {
 
   const data = configSchema.parse({
     mercadoPagoAccessToken: formData.get("mercadoPagoAccessToken") || undefined,
-    whatsappPhoneNumberId: formData.get("whatsappPhoneNumberId") || undefined,
-    whatsappBusinessAccountId: formData.get("whatsappBusinessAccountId") || undefined,
-    whatsappAccessToken: formData.get("whatsappAccessToken") || undefined,
   });
 
   await prisma.empresa.update({
     where: { id: empresaId },
     data: {
       ...(data.mercadoPagoAccessToken ? { mercadoPagoAccessTokenEnc: encrypt(data.mercadoPagoAccessToken) } : {}),
-      ...(data.whatsappPhoneNumberId ? { whatsappPhoneNumberId: data.whatsappPhoneNumberId } : {}),
-      ...(data.whatsappBusinessAccountId ? { whatsappBusinessAccountId: data.whatsappBusinessAccountId } : {}),
-      ...(data.whatsappAccessToken ? { whatsappAccessTokenEnc: encrypt(data.whatsappAccessToken) } : {}),
     },
   });
 

@@ -38,7 +38,6 @@ const MODELOS_COM_EMPRESA_ID = new Set([
   "ContaPagar",
   "ContaReceber",
   "Agendamento",
-  "WhatsappMensagem",
 ]);
 
 const OPERACOES_COM_WHERE = new Set([

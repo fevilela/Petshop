@@ -7,8 +7,6 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao, consultarPagamento } from "@/lib/mercadopago";
-import { sendTemplateMessage, type WhatsappCredenciais } from "@/lib/whatsapp";
-import { normalizePhoneE164 } from "@/lib/utils";
 
 const itemSchema = z.object({
   tipo: z.enum(["PRODUTO", "SERVICO"]),
@@ -267,76 +265,6 @@ export async function verificarPagamentoAction(cobrancaId: string) {
     // Não relançamos: uma falha na checagem manual não deve quebrar a tela
     // de vendas para o atendente, só não atualiza nada desta vez.
     console.error("Falha ao verificar pagamento manualmente:", err);
-  }
-
-  revalidatePath("/vendas");
-  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
-}
-
-/**
- * Envia a cobrança (boleto/pix/link) para o WhatsApp do cliente via template
- * aprovado. Requer WHATSAPP_ACCESS_TOKEN configurado e um template chamado
- * "cobranca_disponivel" aprovado no WhatsApp Manager (ver README).
- */
-export async function enviarCobrancaWhatsapp(cobrancaId: string) {
-  const { prisma, empresaId } = await getSessionTenantPrisma();
-  const cobranca = await prisma.cobranca.findUniqueOrThrow({
-    where: { id: cobrancaId },
-    include: { venda: { include: { cliente: true } } },
-  });
-
-  const cliente = cobranca.venda?.cliente;
-  if (!cliente) throw new Error("Cobrança sem cliente associado.");
-
-  const telefone = normalizePhoneE164(cliente.telefone);
-  const linkOuInfo = cobranca.linkPagamento || cobranca.qrCode || "gerar manualmente";
-
-  try {
-    const empresa = await sharedPrisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
-    if (!empresa.whatsappPhoneNumberId || !empresa.whatsappAccessTokenEnc) {
-      throw new Error("WhatsApp não configurado para esta empresa. Configure em /configuracoes.");
-    }
-    const creds: WhatsappCredenciais = {
-      phoneNumberId: empresa.whatsappPhoneNumberId,
-      accessToken: decrypt(empresa.whatsappAccessTokenEnc),
-    };
-
-    const resultado = await sendTemplateMessage(creds, telefone, "cobranca_disponivel", "pt_BR", [
-      cliente.nome,
-      String(cobranca.valor),
-      cobranca.tipo,
-      linkOuInfo,
-    ]);
-
-    await prisma.$transaction([
-      prisma.whatsappMensagem.create({
-        data: {
-          empresaId,
-          clienteId: cliente.id,
-          cobrancaId: cobranca.id,
-          telefone,
-          tipo: "cobranca",
-          status: "ENVIADO",
-          mensagemId: resultado?.messages?.[0]?.id,
-        },
-      }),
-      prisma.cobranca.update({ where: { id: cobranca.id }, data: { enviadoWhatsappEm: new Date() } }),
-    ]);
-  } catch (err) {
-    await prisma.whatsappMensagem.create({
-      data: {
-        empresaId,
-        clienteId: cliente.id,
-        cobrancaId: cobranca.id,
-        telefone,
-        tipo: "cobranca",
-        status: "FALHA",
-        erro: err instanceof Error ? err.message : String(err),
-      },
-    });
-    // Não relançamos o erro: uma falha de envio não deve quebrar a tela de
-    // vendas para o atendente. O log em WhatsappMensagem permite reenviar depois.
-    console.error("Falha ao enviar cobrança por WhatsApp:", err);
   }
 
   revalidatePath("/vendas");
