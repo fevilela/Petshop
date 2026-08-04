@@ -1,4 +1,5 @@
 import CopyButton from "@/components/CopyButton";
+import AbrirWhatsAppButton from "@/components/AbrirWhatsAppButton";
 import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
 import { COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "@/lib/cobranca-labels";
 
@@ -9,6 +10,7 @@ type CobrancaExibicao = {
   valor: number;
   dataVencimento: Date;
   dataPagamento: Date | null;
+  notificadoClienteEm: Date | null;
   mercadoPagoId: string | null;
   qrCode: string | null;
   qrCodeBase64: string | null;
@@ -23,9 +25,11 @@ type CobrancaExibicao = {
  * que as duas são, no fundo, a mesma Cobranca só com origem diferente
  * (vendaId vs. assinaturaId+referenciaMes).
  *
- * `marcarPagaAction`/`verificarPagamentoAction` chegam já vinculadas
- * (`.bind(null, cobranca.id)`) — Server Components podem passar Server
- * Actions já vinculadas como prop pra outro Server Component normalmente.
+ * `marcarPagaAction`/`verificarPagamentoAction`/`marcarNotificadoAction`
+ * chegam já vinculadas (`.bind(null, cobranca.id)`) — Server Actions podem
+ * ser passadas como prop tanto pra outro Server Component quanto para um
+ * Client Component (caso de `marcarNotificadoAction`, repassada pra
+ * AbrirWhatsAppButton) normalmente.
  */
 export default function CobrancaPainel({
   cobranca,
@@ -33,6 +37,7 @@ export default function CobrancaPainel({
   clienteTelefone,
   marcarPagaAction,
   verificarPagamentoAction,
+  marcarNotificadoAction,
   avisoFalhaGeracao,
 }: {
   cobranca: CobrancaExibicao;
@@ -40,6 +45,7 @@ export default function CobrancaPainel({
   clienteTelefone: string;
   marcarPagaAction: (formData: FormData) => Promise<void>;
   verificarPagamentoAction?: (formData: FormData) => Promise<void>;
+  marcarNotificadoAction: () => Promise<void>;
   avisoFalhaGeracao?: string;
 }) {
   return (
@@ -52,6 +58,15 @@ export default function CobrancaPainel({
         <span className="text-gray-500">Vencimento: {formatDateTime(cobranca.dataVencimento)}</span>
         {cobranca.dataPagamento && (
           <span className="text-gray-500">Pago em: {formatDateTime(cobranca.dataPagamento)}</span>
+        )}
+        {cobranca.notificadoClienteEm ? (
+          <span className="text-gray-500">
+            Enviado ao cliente em: {formatDateTime(cobranca.notificadoClienteEm)}
+          </span>
+        ) : (
+          cobranca.status === "PENDENTE" && (
+            <span className="badge bg-amber-50 text-amber-700">Ainda não enviada ao cliente</span>
+          )
         )}
       </div>
 
@@ -144,7 +159,7 @@ export default function CobrancaPainel({
               <button type="submit" className="btn-secondary text-sm">Verificar pagamento agora</button>
             </form>
           )}
-          <a
+          <AbrirWhatsAppButton
             href={linkWhatsapp(
               clienteTelefone,
               mensagemCobrancaWhatsapp({
@@ -154,12 +169,8 @@ export default function CobrancaPainel({
                 linkOuCodigo: cobranca.linkPagamento || cobranca.qrCode,
               })
             )}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-secondary text-sm"
-          >
-            Abrir no WhatsApp
-          </a>
+            marcarNotificadoAction={marcarNotificadoAction}
+          />
         </div>
       )}
     </div>

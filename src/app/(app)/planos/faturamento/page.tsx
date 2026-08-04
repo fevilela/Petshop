@@ -53,7 +53,11 @@ export default async function FaturamentoPage() {
                 <td className="font-medium">{formatCurrency(p.valorTotal)}</td>
                 <td>
                   {p.jaGerada ? (
-                    <span className="badge bg-green-50 text-green-700">Gerada</span>
+                    p.notificado ? (
+                      <span className="badge bg-green-50 text-green-700">Enviada</span>
+                    ) : (
+                      <span className="badge bg-amber-50 text-amber-700">Gerada, aguardando envio</span>
+                    )
                   ) : (
                     <span className="badge bg-gray-100 text-gray-500">Pendente</span>
                   )}

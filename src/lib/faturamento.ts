@@ -35,6 +35,8 @@ export type PreviaFatura = {
   valorTotal: number;
   jaGerada: boolean;
   cobrancaId: string | null;
+  /** Só relevante quando `jaGerada` — se o atendente já clicou em "Abrir no WhatsApp" pra essa fatura. */
+  notificado: boolean;
 };
 
 /**
@@ -84,6 +86,7 @@ export async function calcularPreviaFatura(
     valorTotal: valorMensalidade + valorAvulsos,
     jaGerada: !!cobrancaExistente,
     cobrancaId: cobrancaExistente?.id ?? null,
+    notificado: !!cobrancaExistente?.notificadoClienteEm,
   };
 }
 

@@ -44,3 +44,19 @@ export async function verificarPagamentoCobranca(empresaId: string, cobrancaId: 
     console.error(`[cobranca] Falha ao verificar pagamento manualmente (cobranca ${cobrancaId}):`, err);
   }
 }
+
+/**
+ * Marca que o atendente clicou em "Abrir no WhatsApp" pra esta cobrança —
+ * usado só pra alimentar o lembrete de faturas geradas automaticamente pelo
+ * cron que ainda não foram enviadas (painel + lista de faturamento mensal).
+ * NÃO é confirmação de entrega/leitura: não temos como saber se a mensagem
+ * foi realmente enviada ou lida (o WhatsApp abre numa aba separada, fora do
+ * nosso controle) — é só "alguém clicou aqui", suficiente pra tirar o
+ * lembrete de vista sem reintroduzir uma integração.
+ */
+export async function marcarCobrancaNotificada(empresaId: string, cobrancaId: string): Promise<void> {
+  await prisma.cobranca.updateMany({
+    where: { id: cobrancaId, empresaId },
+    data: { notificadoClienteEm: new Date() },
+  });
+}

@@ -19,6 +19,7 @@ export default async function DashboardPage() {
     vendasMes,
     cobrancasPendentes,
     cobrancasVencidas,
+    faturasAguardandoEnvio,
     proximosAgendamentos,
   ] = await Promise.all([
     prisma.cliente.count(),
@@ -32,6 +33,13 @@ export default async function DashboardPage() {
     prisma.cobranca.count({ where: { status: "PENDENTE" } }),
     prisma.cobranca.count({
       where: { status: "PENDENTE", dataVencimento: { lt: new Date() } },
+    }),
+    // Faturas mensais consolidadas (assinaturaId setado) já geradas — pelo
+    // atendente ou pelo cron — mas que ninguém ainda clicou em "Abrir no
+    // WhatsApp": é o lembrete que fecha a lacuna do envio não ser mais
+    // automático (ver README "Faturamento mensal").
+    prisma.cobranca.count({
+      where: { assinaturaId: { not: null }, status: "PENDENTE", notificadoClienteEm: null },
     }),
     prisma.agendamento.findMany({
       where: { dataHoraInicio: { gte: new Date() }, status: { in: ["AGENDADO", "CONFIRMADO"] } },
@@ -51,6 +59,13 @@ export default async function DashboardPage() {
     { label: "Clientes", value: totalClientes, href: "/clientes" },
     { label: "Animais ativos", value: totalAnimais, href: "/animais", modulo: "animais" },
     { label: "Mensalistas ativos", value: assinaturasAtivas, href: "/planos", modulo: "planos" },
+    {
+      label: "Faturas aguardando envio",
+      value: faturasAguardandoEnvio,
+      href: "/planos/faturamento",
+      modulo: "planos",
+      alerta: faturasAguardandoEnvio > 0,
+    },
     {
       label: "Vendas no mês",
       value: `${vendasMes._count} · ${formatCurrency(Number(vendasMes._sum.valorTotal ?? 0))}`,

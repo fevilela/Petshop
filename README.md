@@ -240,6 +240,18 @@ Job manualmente no Render depois do deploy:**
    pela tela de Faturamento mensal continua funcionando normalmente, só não
    acontece sozinha.
 
+**Lembrete de envio (sem mandar nada sozinho).** A geração automática cria a
+fatura, mas não manda nada pro cliente — quem manda continua sendo um
+humano, clicando em "Abrir no WhatsApp" (ver seção anterior). Pra isso não
+passar batido quando o cron gera faturas de madrugada sem ninguém olhando,
+o sistema guarda `Cobranca.notificadoClienteEm` (marcado só quando alguém
+clica nesse botão — **não** é confirmação de entrega/leitura) e usa isso
+pra:
+- Mostrar um card **"Faturas aguardando envio"** no Painel (`/`), destacado
+  em vermelho quando > 0.
+- Marcar cada fatura como "Gerada, aguardando envio" (âmbar) ou "Enviada"
+  (verde) na lista `/planos/faturamento`.
+
 ## Decisões de arquitetura e trade-offs (autocrítica)
 
 - **Isolamento por `empresaId` num banco único, não por banco físico.** Ver

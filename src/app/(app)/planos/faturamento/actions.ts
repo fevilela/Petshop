@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { gerarFaturaMensal, referenciaMesAtual } from "@/lib/faturamento";
-import { verificarPagamentoCobranca } from "@/lib/cobranca";
+import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
 
 /** Gera (ou, se já existir, só abre) a fatura do mês corrente pra uma assinatura. */
 export async function gerarFaturaAction(assinaturaId: string) {
@@ -29,6 +29,14 @@ export async function marcarFaturaPagaAction(cobrancaId: string) {
 export async function verificarPagamentoFaturaAction(cobrancaId: string) {
   const { empresaId } = await getSessionTenantPrisma();
   await verificarPagamentoCobranca(empresaId, cobrancaId);
+  revalidatePath("/planos/faturamento");
+  revalidatePath(`/planos/faturamento/${cobrancaId}`);
+}
+
+/** Marca que o atendente clicou em "Abrir no WhatsApp" pra esta fatura — ver src/lib/cobranca.ts. */
+export async function marcarFaturaNotificadaAction(cobrancaId: string) {
+  const { empresaId } = await getSessionTenantPrisma();
+  await marcarCobrancaNotificada(empresaId, cobrancaId);
   revalidatePath("/planos/faturamento");
   revalidatePath(`/planos/faturamento/${cobrancaId}`);
 }

@@ -7,7 +7,7 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
-import { verificarPagamentoCobranca } from "@/lib/cobranca";
+import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
 
 const itemSchema = z.object({
   tipo: z.enum(["PRODUTO", "SERVICO"]),
@@ -245,6 +245,17 @@ export async function verificarPagamentoAction(cobrancaId: string) {
   const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
 
   await verificarPagamentoCobranca(empresaId, cobrancaId);
+
+  revalidatePath("/vendas");
+  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
+}
+
+/** Marca que o atendente clicou em "Abrir no WhatsApp" pra esta cobrança — ver src/lib/cobranca.ts. */
+export async function marcarNotificadoAction(cobrancaId: string) {
+  const { prisma, empresaId } = await getSessionTenantPrisma();
+  const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
+
+  await marcarCobrancaNotificada(empresaId, cobrancaId);
 
   revalidatePath("/vendas");
   if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);

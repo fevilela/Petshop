@@ -431,6 +431,12 @@ model Cobranca {
   linhaDigitavel   String?        // boleto
   dataVencimento   DateTime
   dataPagamento    DateTime?
+  // Marca só o clique em "Abrir no WhatsApp" (CobrancaPainel) — NÃO é
+  // confirmação de entrega/leitura (não temos integração pra isso, de
+  // propósito, ver README "Mercado Pago e WhatsApp"). Serve pra alimentar o
+  // lembrete "fatura gerada mas ninguém marcou como enviada" no painel e na
+  // lista de faturamento mensal.
+  notificadoClienteEm DateTime?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
