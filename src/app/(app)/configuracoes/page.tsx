@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { atualizarConfiguracoesAction } from "./actions";
+import ConfiguracoesForm from "@/components/ConfiguracoesForm";
 
 export default async function ConfiguracoesPage() {
   const session = await getServerSession(authOptions);
@@ -26,45 +26,11 @@ export default async function ConfiguracoesPage() {
         </p>
       )}
 
-      <form action={atualizarConfiguracoesAction} className="card p-6 space-y-6 max-w-xl">
-        <div>
-          <h2 className="font-medium text-gray-900 mb-2">Mercado Pago</h2>
-          <label className="label" htmlFor="mercadoPagoAccessToken">Access Token de produção</label>
-          <input
-            id="mercadoPagoAccessToken"
-            name="mercadoPagoAccessToken"
-            className="input"
-            placeholder={empresa.mercadoPagoAccessTokenEnc ? "•••••••• (configurado — digite para trocar)" : "APP_USR-..."}
-            disabled={somenteLeitura}
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            Obtenha em mercadopago.com.br/developers/panel, na sua própria conta Mercado Pago.
-          </p>
-          <div className="mt-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
-            <p className="text-xs text-gray-500">
-              Cole esta URL no painel do Mercado Pago (Suas integrações → Webhooks) para receber confirmação automática de pagamentos:
-            </p>
-            <code className="text-xs break-all">
-              {(process.env.APP_URL || "http://localhost:3000") + "/api/webhooks/mercadopago/" + empresa.id}
-            </code>
-          </div>
-        </div>
-
-        <div className="border-t pt-4">
-          <h2 className="font-medium text-gray-900 mb-2">WhatsApp</h2>
-          <p className="text-sm text-gray-500">
-            O envio de cobrança por WhatsApp é feito por link direto (wa.me) na tela da venda — não
-            precisa configurar nenhuma credencial aqui. O sistema já sabe o telefone de cada
-            cliente cadastrado.
-          </p>
-        </div>
-
-        {!somenteLeitura && (
-          <div className="flex gap-2">
-            <button type="submit" className="btn-primary">Salvar</button>
-          </div>
-        )}
-      </form>
+      <ConfiguracoesForm
+        webhookUrl={(process.env.APP_URL || "http://localhost:3000") + "/api/webhooks/mercadopago/" + empresa.id}
+        mercadoPagoConfigurado={!!empresa.mercadoPagoAccessTokenEnc}
+        somenteLeitura={somenteLeitura}
+      />
     </div>
   );
 }
