@@ -213,7 +213,22 @@ export async function createVenda(formData: FormData) {
           "Mercado Pago não configurado para esta empresa. Configure o token em /configuracoes."
         );
       }
-      const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+      // Descriptografia isolada num try próprio: se falhar (typicamente
+      // ENCRYPTION_KEY diferente do usado quando o token foi salvo — ver
+      // README), quem olhar o log do servidor precisa saber IMEDIATAMENTE
+      // que é isso, e não confundir com uma falha da API do Mercado Pago em
+      // si (a mensagem na tela, por design, não distingue os dois pro
+      // atendente — só o log do servidor tem esse detalhe).
+      let accessToken: string;
+      try {
+        accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+      } catch (decryptErr) {
+        console.error(
+          `[vendas actions] Falha ao descriptografar o token do Mercado Pago da empresa ${empresaId} — provável ENCRYPTION_KEY diferente do usado quando o token foi salvo (ou dado corrompido). Correção: re-salvar o token em /configuracoes (isso re-criptografa com a chave atual).`,
+          decryptErr
+        );
+        throw decryptErr;
+      }
 
       const input = {
         cobrancaId: cobranca.id,

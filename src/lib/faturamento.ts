@@ -174,7 +174,20 @@ export async function gerarFaturaMensal(
     if (!empresa.mercadoPagoAccessTokenEnc) {
       throw new Error("Mercado Pago não configurado para esta empresa.");
     }
-    const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+    // Ver comentário equivalente em vendas/actions.ts: descriptografia
+    // isolada num try próprio pra diferenciar no log "ENCRYPTION_KEY errado"
+    // de "API do Mercado Pago falhou" — importante aqui especialmente
+    // porque o cron roda sem ninguém olhando na hora.
+    let accessToken: string;
+    try {
+      accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+    } catch (decryptErr) {
+      console.error(
+        `[faturamento] Falha ao descriptografar o token do Mercado Pago da empresa ${empresaId} — provável ENCRYPTION_KEY diferente do usado quando o token foi salvo (ou dado corrompido). Correção: re-salvar o token em /configuracoes (isso re-criptografa com a chave atual).`,
+        decryptErr
+      );
+      throw decryptErr;
+    }
     const input = {
       cobrancaId: cobranca.id,
       empresaId,
