@@ -8,17 +8,21 @@ import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
 import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
+import { criarAssinatura } from "@/lib/assinatura";
 
 const itemSchema = z.object({
-  tipo: z.enum(["PRODUTO", "SERVICO"]),
-  id: z.string().min(1),
+  itemCatalogoId: z.string().min(1),
   quantidade: z.number().int().positive(),
-  animalId: z.string().optional(),
 });
 
 const vendaSchema = z.object({
   clienteId: z.string().min(1, "Selecione o cliente"),
   animalId: z.string().optional(),
+  // MENSALISTA (a antiga forma "incluso no plano, grátis") não é mais
+  // aceita aqui de propósito — a tela não oferece mais essa opção (ver
+  // VendaForm.tsx) e o conceito foi removido (ver prisma/schema.prisma). O
+  // valor continua existindo no enum do banco só por causa de vendas
+  // antigas já gravadas.
   formaPagamento: z.enum([
     "DINHEIRO",
     "PIX_MANUAL",
@@ -26,7 +30,6 @@ const vendaSchema = z.object({
     "BOLETO",
     "PIX_MERCADOPAGO",
     "CARTAO_LINK",
-    "MENSALISTA",
     "A_FATURAR",
   ]),
   assinaturaId: z.string().optional(),
@@ -38,11 +41,12 @@ const vendaSchema = z.object({
 const FORMAS_COM_COBRANCA = ["BOLETO", "PIX_MERCADOPAGO", "CARTAO_LINK"] as const;
 
 /**
- * MENSALISTA: item incluso no plano, nunca cobrado. A_FATURAR: item extra
- * de um mensalista, não pago na hora — acumula pra fatura mensal (ver
- * src/lib/faturamento.ts). As duas exigem uma assinatura ativa do cliente.
+ * A_FATURAR: item extra de um mensalista, não pago na hora — acumula pra
+ * fatura mensal (ver src/lib/faturamento.ts). Exige uma assinatura ATIVA já
+ * existente do cliente (diferente de vender uma MENSALIDADE no carrinho,
+ * que CRIA a assinatura — ver mais abaixo).
  */
-const FORMAS_QUE_EXIGEM_ASSINATURA = new Set(["MENSALISTA", "A_FATURAR"]);
+const FORMAS_QUE_EXIGEM_ASSINATURA = new Set(["A_FATURAR"]);
 
 export async function createVenda(formData: FormData) {
   const { prisma, empresaId, usuarioId } = await getSessionTenantPrisma();
@@ -83,48 +87,47 @@ export async function createVenda(formData: FormData) {
     );
   }
 
-  const animalIds = Array.from(
-    new Set([parsed.animalId, ...itensInput.map((i) => i.animalId)].filter((v): v is string => !!v))
-  );
-  if (animalIds.length > 0) {
-    const animaisEncontrados = await prisma.animal.findMany({ where: { id: { in: animalIds } } });
-    if (animaisEncontrados.length !== animalIds.length) {
-      throw new Error("Um dos animais selecionados não foi encontrado.");
-    }
+  if (parsed.animalId) {
+    const animalEncontrado = await prisma.animal.findUnique({ where: { id: parsed.animalId } });
+    if (!animalEncontrado) throw new Error("O animal selecionado não foi encontrado.");
   }
 
   if (FORMAS_QUE_EXIGEM_ASSINATURA.has(parsed.formaPagamento)) {
     await prisma.assinatura.findUniqueOrThrow({ where: { id: parsed.assinaturaId! } });
   }
 
-  // Nunca confiamos no preço vindo do cliente: buscamos produtos/serviços no banco
+  // Nunca confiamos no preço vindo do cliente: buscamos o catálogo no banco
   // e recalculamos os valores no servidor (evita manipulação do preço no navegador).
-  const produtoIds = itensInput.filter((i) => i.tipo === "PRODUTO").map((i) => i.id);
-  const servicoIds = itensInput.filter((i) => i.tipo === "SERVICO").map((i) => i.id);
+  const itemCatalogoIds = itensInput.map((i) => i.itemCatalogoId);
+  const itensCatalogo = await prisma.itemCatalogo.findMany({ where: { id: { in: itemCatalogoIds } } });
+  const catalogoMap = new Map(itensCatalogo.map((c) => [c.id, c]));
 
-  const [produtos, servicos] = await Promise.all([
-    prisma.produto.findMany({ where: { id: { in: produtoIds } } }),
-    prisma.servico.findMany({ where: { id: { in: servicoIds } } }),
-  ]);
-  const produtoMap = new Map(produtos.map((p) => [p.id, p]));
-  const servicoMap = new Map(servicos.map((s) => [s.id, s]));
+  const mensalidadesNoCarrinho = itensInput.filter((i) => catalogoMap.get(i.itemCatalogoId)?.tipo === "MENSALIDADE");
+  if (mensalidadesNoCarrinho.length > 1) {
+    throw new Error("Só é possível assinar uma mensalidade por venda.");
+  }
 
   const itensParaCriar = itensInput.map((item) => {
-    const catalogo = item.tipo === "PRODUTO" ? produtoMap.get(item.id) : servicoMap.get(item.id);
+    const catalogo = catalogoMap.get(item.itemCatalogoId);
     if (!catalogo) throw new Error("Item do catálogo não encontrado.");
     const precoUnitario = Number(catalogo.preco);
     return {
-      tipo: item.tipo,
-      produtoId: item.tipo === "PRODUTO" ? item.id : undefined,
-      servicoId: item.tipo === "SERVICO" ? item.id : undefined,
-      animalId: item.animalId || parsed.animalId || undefined,
+      itemCatalogoId: item.itemCatalogoId,
+      tipo: catalogo.tipo,
+      animalId: parsed.animalId || undefined,
       quantidade: item.quantidade,
       precoUnitario,
       subtotal: precoUnitario * item.quantidade,
     };
   });
 
-  const valorTotal = itensParaCriar.reduce((acc, i) => acc + i.subtotal, 0);
+  // Mensalidade não entra no valor cobrado NESTA venda — ela cria a
+  // Assinatura, e a primeira cobrança sai na próxima fatura mensal (mesmo
+  // fluxo de qualquer outro mês, ver src/lib/faturamento.ts). O item ainda
+  // é gravado em ItemVenda (subtotal cheio) só pra aparecer no recibo.
+  const valorTotal = itensParaCriar
+    .filter((i) => i.tipo !== "MENSALIDADE")
+    .reduce((acc, i) => acc + i.subtotal, 0);
 
   // empresaId é passado explicitamente aqui (mesmo o client `prisma` já
   // sendo escopado por tenant) porque `$transaction(async (tx) => ...)` usa
@@ -143,18 +146,28 @@ export async function createVenda(formData: FormData) {
         valorTotal,
         observacoes: parsed.observacoes,
         criadoPorId: usuarioId,
-        itens: { create: itensParaCriar },
+        itens: {
+          create: itensParaCriar.map(({ tipo: _tipo, ...i }) => i),
+        },
       },
     });
 
     for (const item of itensParaCriar) {
-      if (item.produtoId) {
+      if (item.tipo === "PRODUTO") {
         // updateMany (não update) de propósito: permite combinar id +
         // empresaId no where sem depender do "extended where unique" do
         // Prisma — garante que nunca decrementamos estoque de outra empresa.
-        await tx.produto.updateMany({
-          where: { id: item.produtoId, empresaId },
+        await tx.itemCatalogo.updateMany({
+          where: { id: item.itemCatalogoId, empresaId },
           data: { estoque: { decrement: item.quantidade } },
+        });
+      }
+      if (item.tipo === "MENSALIDADE") {
+        await criarAssinatura({
+          prisma: tx,
+          empresaId,
+          clienteId: parsed.clienteId,
+          itemCatalogoId: item.itemCatalogoId,
         });
       }
     }
@@ -162,7 +175,10 @@ export async function createVenda(formData: FormData) {
     return v;
   });
 
-  if ((FORMAS_COM_COBRANCA as readonly string[]).includes(parsed.formaPagamento)) {
+  // valorTotal > 0 de propósito: se o carrinho só tinha mensalidade (nada a
+  // cobrar nesta venda), não faz sentido gerar boleto/Pix/link de R$ 0 no
+  // Mercado Pago — a forma de pagamento escolhida simplesmente não se aplica.
+  if (valorTotal > 0 && (FORMAS_COM_COBRANCA as readonly string[]).includes(parsed.formaPagamento)) {
     const dataVencimento = new Date();
     dataVencimento.setDate(dataVencimento.getDate() + 3);
 

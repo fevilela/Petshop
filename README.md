@@ -86,20 +86,45 @@ WhatsApp não precisa de credencial — ver seção própria abaixo.
 `Empresa` (petshop-cliente) · `Usuario` (login, com `role` e `empresaId`
 opcional para `SUPER_ADMIN`) · `ConviteUsuario` (token de definição de
 senha) — e, escopados por `empresaId`: `Cliente` → `Animal` (1:N) · `Canil`
-↔ `Hospedagem` ↔ `Animal` · `Produto` / `Servico` (catálogo) · `Plano`
-(template mensal) → `PlanoItem` · `Assinatura` (cliente + plano =
+↔ `Hospedagem` ↔ `Animal` · `ItemCatalogo` (catálogo único — produto,
+serviço e mensalidade são o mesmo model, diferenciados por `tipo`, ver
+"Catálogo unificado" abaixo) · `Assinatura` (cliente + mensalidade =
 "mensalista") · `Venda` → `ItemVenda` · `Cobranca` (boleto/Pix/link — de uma
 `Venda` avulsa OU consolidada de uma `Assinatura`, ver "Faturamento mensal")
 · `ContaPagar` / `ContaReceber` · `Agendamento`.
 
+### Catálogo unificado
+
+Produto, serviço e mensalidade viviam em três models separados (`Produto`,
+`Servico`, `Plano`) até essa confusão ficar evidente na prática: cadastro
+espalhado em duas telas (`/produtos-servicos` e `/planos`), e duas formas de
+pagamento parecidas (`MENSALISTA` grátis "incluso no plano" vs. `A_FATURAR`)
+fazendo a mesma coisa por caminhos diferentes. Unificados em `ItemCatalogo`
+(campo `tipo: PRODUTO | SERVICO | MENSALIDADE`), com um cadastro único em
+`/catalogo`.
+
 **Como funciona "alguns clientes são mensalistas, outros não":** não existe
 um campo booleano fixo no `Cliente`. Um cliente vira mensalista ao ganhar
-uma `Assinatura` ativa a um `Plano`. Na tela de Vendas, ao escolher a forma
-de pagamento "Mensalista", a venda é debitada da assinatura (sem gerar
-cobrança nova); com "Lançar na fatura mensal" a venda fica pendente
-(`faturaCobrancaId` nulo) até entrar numa fatura consolidada — ver seção
-"Faturamento mensal" abaixo; qualquer outra forma de pagamento segue o
-fluxo avulso normal (cobrança gerada e cobrada na hora).
+uma `Assinatura` ativa a um `ItemCatalogo` do tipo `MENSALIDADE` — pelo
+cadastro do cliente (`/clientes/novo` ou editar) ou vendendo a mensalidade
+como item do carrinho em Vendas (nesse caso, a primeira mensalidade **não**
+é cobrada na hora: só cria a assinatura, e entra na fatura mensal normal
+como qualquer mês seguinte). Regra: só uma assinatura ativa por cliente por
+vez (`src/lib/assinatura.ts`) — trocar de mensalidade é cancelar a atual e
+assinar de novo.
+
+Na tela de Vendas, um mensalista pode comprar algo extra durante o mês e
+escolher a forma de pagamento "Mensalista (cobra na fatura mensal)"
+(`A_FATURAR` no banco): a venda fica pendente até entrar numa fatura
+consolidada — ver seção "Faturamento mensal" abaixo. Qualquer outra forma de
+pagamento segue o fluxo avulso normal (cobrança gerada e cobrada na hora) e
+aparece só em `/vendas` (a lista principal filtra fora `A_FATURAR` de
+propósito — compras de mensalista ficam só em `/planos/faturamento`, pra não
+misturar "o que já foi pago" com "o que vai entrar na fatura").
+
+`FormaPagamento.MENSALISTA` (o antigo "incluso no plano, grátis") continua
+existindo no enum do banco só por causa de vendas históricas já gravadas —
+não é mais oferecido em nenhuma tela.
 
 **Nota sobre `Venda.numero`:** é uma sequência global (autoincrement do
 Postgres), não por empresa — o petshop A pode ter a venda #47 e o petshop B
@@ -276,11 +301,16 @@ pra:
   futuro PRECISA filtrar `empresaId` manualmente — o extension só cobre a
   API normal do Prisma Client. Hoje não há nenhum `$queryRaw` no código.
 - **Soft delete em `Animal`** (campo `ativo`), hard delete em `Cliente`,
-  `Canil`, `Produto`/`Servico` (toggle `ativo` para produto/serviço).
+  `Canil`, `ItemCatalogo` (toggle `ativo` para produto/serviço/mensalidade).
   Motivo: animal tem histórico de vendas/agendamentos que não pode ficar
   órfão; cliente sem histórico pode ser removido de fato.
 - **Preço recalculado no servidor** em `vendas/actions.ts`: o formulário
-  manda apenas `produtoId`/`servicoId` + quantidade, nunca o preço.
+  manda apenas `itemCatalogoId` + quantidade, nunca o preço.
+- **IDs preservados na migração Produto/Servico/Plano → ItemCatalogo.**
+  Como os três models antigos usavam `cuid()`, o risco de colisão entre eles
+  é desprezível — preservar o `id` original de cada linha evitou remapear
+  toda FK em `ItemVenda`/`Assinatura`/`Agendamento` na migração (ver
+  `prisma/migrations/20260805135835_catalogo_unificado`).
 - **Cron do faturamento mensal é um endpoint HTTP chamado externamente, não
   um job/fila interno.** Optei por não introduzir infraestrutura de fila
   (BullMQ, etc.) só pra rodar uma vez por dia — um Route Handler protegido

@@ -11,7 +11,7 @@ export default async function FaturaDetalhePage({ params }: { params: { cobranca
   const cobranca = await prisma.cobranca.findUnique({
     where: { id: params.cobrancaId },
     include: {
-      assinatura: { include: { cliente: true, plano: true } },
+      assinatura: { include: { cliente: true, itemCatalogo: true } },
       vendasFaturadas: { orderBy: { createdAt: "asc" } },
     },
   });
@@ -30,7 +30,7 @@ export default async function FaturaDetalhePage({ params }: { params: { cobranca
         <h1 className="text-xl font-semibold text-gray-900 mt-1">
           Fatura {cobranca.referenciaMes} — {cobranca.assinatura.cliente.nome}
         </h1>
-        <p className="text-sm text-gray-500">{cobranca.assinatura.plano.nome}</p>
+        <p className="text-sm text-gray-500">{cobranca.assinatura.itemCatalogo.nome}</p>
       </div>
 
       <div className="card p-4">
@@ -41,7 +41,7 @@ export default async function FaturaDetalhePage({ params }: { params: { cobranca
           </thead>
           <tbody>
             <tr>
-              <td>Mensalidade ({cobranca.assinatura.plano.nome})</td>
+              <td>Mensalidade ({cobranca.assinatura.itemCatalogo.nome})</td>
               <td className="text-gray-500">—</td>
               <td className="text-right">{formatCurrency(valorMensalidade)}</td>
             </tr>

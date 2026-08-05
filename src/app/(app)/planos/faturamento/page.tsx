@@ -10,7 +10,7 @@ export default async function FaturamentoPage() {
 
   const assinaturas = await prisma.assinatura.findMany({
     where: { status: "ATIVA" },
-    include: { cliente: true, plano: true },
+    include: { cliente: true, itemCatalogo: true },
     orderBy: { cliente: { nome: "asc" } },
   });
 
@@ -40,14 +40,14 @@ export default async function FaturamentoPage() {
         <table className="table-base">
           <thead>
             <tr>
-              <th>Cliente</th><th>Plano</th><th>Mensalidade</th><th>Avulsos</th><th>Total</th><th>Status</th><th></th>
+              <th>Cliente</th><th>Mensalidade</th><th>Valor mensalidade</th><th>Avulsos</th><th>Total</th><th>Status</th><th></th>
             </tr>
           </thead>
           <tbody>
             {previas.map((p) => (
               <tr key={p.assinaturaId}>
                 <td>{p.clienteNome}</td>
-                <td>{p.planoNome}</td>
+                <td>{p.nomeMensalidade}</td>
                 <td>{formatCurrency(p.valorMensalidade)}</td>
                 <td>{p.valorAvulsos > 0 ? formatCurrency(p.valorAvulsos) : "—"}</td>
                 <td className="font-medium">{formatCurrency(p.valorTotal)}</td>

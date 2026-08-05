@@ -55,9 +55,10 @@ enum StatusAgendamento {
   CANCELADO
 }
 
-enum TipoItemVenda {
+enum TipoItemCatalogo {
   PRODUTO
   SERVICO
+  MENSALIDADE
 }
 
 enum FormaPagamento {
@@ -67,8 +68,18 @@ enum FormaPagamento {
   BOLETO
   PIX_MERCADOPAGO
   CARTAO_LINK
+  // DEPRECADO: representava "item incluso de graça no plano". Esse conceito
+  // foi removido (ver PlanoItem, também removido) — não é mais oferecido na
+  // tela de Vendas. Mantido no enum só porque vendas antigas no banco usam
+  // esse valor e remover um valor de enum no Postgres exige recriar o tipo;
+  // não vale o risco pra um valor puramente histórico.
   MENSALISTA
-  A_FATURAR // compra avulsa de um mensalista, lançada na fatura mensal em vez de paga na hora
+  // Único jeito de "pagar como mensalista" hoje: acumula na fatura mensal em
+  // vez de pagar na hora. Exibido na tela como "Mensalista" (ver
+  // src/lib/cobranca-labels.ts) — o nome do enum ficou de quando também
+  // existia o MENSALISTA acima; renomear o valor do enum tem o mesmo custo
+  // de recriar o tipo, então a UI que traduz, não o banco.
+  A_FATURAR
 }
 
 enum StatusVenda {
@@ -260,95 +271,64 @@ model Hospedagem {
   @@index([animalId])
 }
 
-model Produto {
-  id         String      @id @default(cuid())
-  empresaId  String
-  nome       String
-  categoria  String?
-  descricao  String?
-  preco      Decimal     @db.Decimal(10, 2)
-  estoque    Int         @default(0)
-  sku        String?     // único DENTRO da empresa
-  ativo      Boolean     @default(true)
-  createdAt  DateTime    @default(now())
+// Catálogo único da empresa: produto, serviço OU mensalidade, diferenciados
+// por `tipo`. Antes eram três models separados (Produto, Servico, Plano) —
+// unificados porque, na prática, os três são "coisas que a empresa vende",
+// e a separação em models diferentes forçava a tela de Vendas a ter dois
+// seletores (produto vs. serviço) e deixava mensalidade fora do catálogo,
+// numa área totalmente à parte (Planos). Ver README para o histórico da
+// decisão.
+//
+// Campos que só fazem sentido pra um `tipo` ficam opcionais e simplesmente
+// não são preenchidos pros outros (`estoque`/`sku` só PRODUTO,
+// `duracaoMinutos` só SERVICO, `diaCobrancaPadrao` só MENSALIDADE) — one
+// table, campos esparsos, mais simples que herança de tabela no Postgres
+// pra esse volume de dados.
+model ItemCatalogo {
+  id                String           @id @default(cuid())
+  empresaId         String
+  tipo              TipoItemCatalogo
+  nome              String
+  categoria         String?
+  descricao         String?
+  // Preço avulso (PRODUTO/SERVICO) OU valor da mensalidade (MENSALIDADE).
+  preco             Decimal          @db.Decimal(10, 2)
+  estoque           Int?             // só PRODUTO
+  sku               String?          // só PRODUTO, único DENTRO da empresa
+  duracaoMinutos    Int?             // só SERVICO
+  diaCobrancaPadrao Int?             // só MENSALIDADE — dia padrão de cobrança pra quem assina
+  ativo             Boolean          @default(true)
+  createdAt         DateTime         @default(now())
 
-  itensVenda ItemVenda[]
-  planoItens PlanoItem[]
+  itensVenda        ItemVenda[]
+  assinaturas       Assinatura[]
+  agendamentos      Agendamento[]
 
   @@unique([empresaId, sku])
   @@index([empresaId])
+  @@index([empresaId, tipo])
 }
 
-model Servico {
-  id             String        @id @default(cuid())
-  empresaId      String
-  nome           String
-  categoria      String?       // Banho, Tosa, Consulta, Hospedagem/diária...
-  descricao      String?
-  preco          Decimal       @db.Decimal(10, 2)
-  duracaoMinutos Int?
-  ativo          Boolean       @default(true)
-  createdAt      DateTime      @default(now())
-
-  itensVenda     ItemVenda[]
-  planoItens     PlanoItem[]
-  agendamentos   Agendamento[]
-
-  @@index([empresaId])
-}
-
-// Modelo (template) de plano mensal reutilizável, ex: "Banho Mensal 4x"
-model Plano {
-  id                String       @id @default(cuid())
-  empresaId         String
-  nome              String
-  descricao         String?
-  valorMensal       Decimal      @db.Decimal(10, 2)
-  diaCobrancaPadrao Int          @default(5)
-  ativo             Boolean      @default(true)
-  createdAt         DateTime     @default(now())
-
-  itens             PlanoItem[]
-  assinaturas       Assinatura[]
-
-  @@index([empresaId])
-}
-
-// Itens inclusos em um plano (quantidade mensal de cada produto/serviço).
-// Tem empresaId próprio (mesmo sendo sempre acessado a partir de um Plano)
-// porque também é criado/removido de forma avulsa (addPlanoItem/removePlanoItem).
-model PlanoItem {
-  id         String   @id @default(cuid())
-  empresaId  String
-  planoId    String
-  plano      Plano    @relation(fields: [planoId], references: [id], onDelete: Cascade)
-  produtoId  String?
-  produto    Produto? @relation(fields: [produtoId], references: [id])
-  servicoId  String?
-  servico    Servico? @relation(fields: [servicoId], references: [id])
-  quantidade Int      @default(1) // quantas vezes por mês está incluso
-
-  @@index([empresaId])
-  @@index([planoId])
-}
-
-// Assinatura de um cliente a um plano (o que torna o cliente "mensalista")
+// Assinatura de um cliente a uma mensalidade do catálogo (o que torna o
+// cliente "mensalista"). Criada a partir do cadastro do cliente OU ao
+// vender um item tipo MENSALIDADE no carrinho de Vendas — as duas telas
+// chamam a mesma função (ver src/lib/assinatura.ts).
 model Assinatura {
-  id            String           @id @default(cuid())
-  empresaId     String
-  clienteId     String
-  cliente       Cliente          @relation(fields: [clienteId], references: [id])
-  planoId       String
-  plano         Plano            @relation(fields: [planoId], references: [id])
-  valorMensal   Decimal          @db.Decimal(10, 2) // copiado do plano na criação, pode ser customizado
-  diaCobranca   Int
-  status        StatusAssinatura @default(ATIVA)
-  dataInicio    DateTime         @default(now())
-  dataFim       DateTime?
-  createdAt     DateTime         @default(now())
+  id             String           @id @default(cuid())
+  empresaId      String
+  clienteId      String
+  cliente        Cliente          @relation(fields: [clienteId], references: [id])
+  itemCatalogoId String
+  itemCatalogo   ItemCatalogo     @relation(fields: [itemCatalogoId], references: [id])
+  valorMensal    Decimal          @db.Decimal(10, 2) // copiado do catálogo na criação, pode ser customizado
+  diaCobranca    Int
+  status         StatusAssinatura @default(ATIVA)
+  dataInicio     DateTime         @default(now())
+  dataFim        DateTime?
+  createdAt      DateTime         @default(now())
 
-  cobrancas     Cobranca[]
-  vendas        Venda[]
+  cobrancas      Cobranca[]
+  vendas         Venda[]
 
   @@index([empresaId])
   @@index([clienteId])
@@ -393,22 +373,27 @@ model Venda {
 // Linha de item de uma Venda. NÃO tem empresaId próprio: só existe aninhada
 // dentro de uma Venda (nunca é lida/criada/apagada de forma avulsa), então o
 // isolamento por empresa vem do join com Venda.empresaId.
+//
+// Sempre referencia um ItemCatalogo — inclusive quando é uma MENSALIDADE
+// (vender uma mensalidade no carrinho cria a Assinatura e registra a linha
+// aqui só pra histórico/recibo; esse subtotal NÃO entra em Venda.valorTotal,
+// ver src/app/(app)/vendas/actions.ts). Não precisa mais de um campo `tipo`
+// próprio: dá pra saber PRODUTO/SERVICO/MENSALIDADE pelo `itemCatalogo.tipo`
+// (era um enum redundante quando existiam produtoId/servicoId separados).
 model ItemVenda {
-  id            String        @id @default(cuid())
-  vendaId       String
-  venda         Venda         @relation(fields: [vendaId], references: [id], onDelete: Cascade)
-  tipo          TipoItemVenda
-  produtoId     String?
-  produto       Produto?      @relation(fields: [produtoId], references: [id])
-  servicoId     String?
-  servico       Servico?      @relation(fields: [servicoId], references: [id])
-  animalId      String?       // qual animal recebeu o serviço, se aplicável
-  animal        Animal?       @relation(fields: [animalId], references: [id])
-  quantidade    Int           @default(1)
-  precoUnitario Decimal       @db.Decimal(10, 2)
-  subtotal      Decimal       @db.Decimal(10, 2)
+  id             String       @id @default(cuid())
+  vendaId        String
+  venda          Venda        @relation(fields: [vendaId], references: [id], onDelete: Cascade)
+  itemCatalogoId String
+  itemCatalogo   ItemCatalogo @relation(fields: [itemCatalogoId], references: [id])
+  animalId       String?      // qual animal recebeu o serviço, se aplicável
+  animal         Animal?      @relation(fields: [animalId], references: [id])
+  quantidade     Int          @default(1)
+  precoUnitario  Decimal      @db.Decimal(10, 2)
+  subtotal       Decimal      @db.Decimal(10, 2)
 
   @@index([vendaId])
+  @@index([itemCatalogoId])
 }
 
 // Cobrança gerada via Mercado Pago (boleto / pix / link de cartão),
@@ -500,8 +485,11 @@ model Agendamento {
   cliente        Cliente           @relation(fields: [clienteId], references: [id])
   animalId       String
   animal         Animal            @relation(fields: [animalId], references: [id])
-  servicoId      String?
-  servico        Servico?          @relation(fields: [servicoId], references: [id])
+  // Referencia um ItemCatalogo de tipo SERVICO — o schema não força isso
+  // (Prisma não tem CHECK cross-column nativo aqui), a tela de agenda que só
+  // lista itens desse tipo no seletor.
+  itemCatalogoId String?
+  itemCatalogo   ItemCatalogo?     @relation(fields: [itemCatalogoId], references: [id])
   canilId        String?
   canil          Canil?            @relation(fields: [canilId], references: [id])
   dataHoraInicio DateTime

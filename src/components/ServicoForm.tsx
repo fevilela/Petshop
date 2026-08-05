@@ -36,7 +36,7 @@ export default function ServicoForm({ action, defaultValues }: Props) {
       </div>
       <div className="flex gap-2 pt-2">
         <button type="submit" className="btn-primary">Salvar</button>
-        <a href="/produtos-servicos" className="btn-secondary">Cancelar</a>
+        <a href="/catalogo" className="btn-secondary">Cancelar</a>
       </div>
     </form>
   );

@@ -6,7 +6,11 @@ import { FORMA_LABEL, COBRANCA_BADGE } from "@/lib/cobranca-labels";
 
 export default async function VendasPage() {
   const { prisma } = await getSessionTenantPrisma();
+  // Vendas mensalistas (MENSALISTA histórico + A_FATURAR) ficam só em
+  // /planos/faturamento — aqui é só o que foi pago na hora (ou deveria ter
+  // sido, via Mercado Pago). Ver README pra decisão dessa separação.
   const vendas = await prisma.venda.findMany({
+    where: { formaPagamento: { notIn: ["MENSALISTA", "A_FATURAR"] } },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
@@ -20,7 +24,13 @@ export default async function VendasPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-semibold text-gray-900">Histórico de vendas</h1>
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Histórico de vendas</h1>
+          <p className="text-sm text-gray-500">
+            Vendas pagas na hora. Compras de mensalistas ficam em{" "}
+            <Link href="/planos/faturamento" className="text-brand-700 hover:underline">Faturamento mensal</Link>.
+          </p>
+        </div>
         <Link href="/vendas/novo" className="btn-primary">+ Nova venda</Link>
       </div>
 

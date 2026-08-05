@@ -5,8 +5,8 @@ import { updateServico } from "../../../actions";
 
 export default async function EditarServicoPage({ params }: { params: { id: string } }) {
   const { prisma } = await getSessionTenantPrisma();
-  const servico = await prisma.servico.findUnique({ where: { id: params.id } });
-  if (!servico) notFound();
+  const servico = await prisma.itemCatalogo.findUnique({ where: { id: params.id } });
+  if (!servico || servico.tipo !== "SERVICO") notFound();
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-gray-900">Editar serviço</h1>

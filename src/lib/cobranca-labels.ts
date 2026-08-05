@@ -13,8 +13,11 @@ export const FORMA_LABEL: Record<string, string> = {
   BOLETO: "Boleto",
   PIX_MERCADOPAGO: "Pix (Mercado Pago)",
   CARTAO_LINK: "Link de pagamento",
-  MENSALISTA: "Mensalista",
-  A_FATURAR: "Lançado na fatura mensal",
+  // DEPRECADO: só aparece em vendas antigas (ver comentário no enum
+  // FormaPagamento no schema) — a tela de Vendas não oferece mais essa
+  // opção.
+  MENSALISTA: "Mensalista (incluso no plano, histórico)",
+  A_FATURAR: "Mensalista",
 };
 
 export const COBRANCA_BADGE: Record<string, string> = {

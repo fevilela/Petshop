@@ -28,7 +28,7 @@ export type PreviaFatura = {
   clienteEmail: string | null;
   clienteDocumento: string | null;
   clienteTelefone: string;
-  planoNome: string;
+  nomeMensalidade: string;
   valorMensalidade: number;
   vendasAvulsas: { id: string; numero: number; valorTotal: number; createdAt: Date }[];
   valorAvulsos: number;
@@ -51,7 +51,7 @@ export async function calcularPreviaFatura(
 ): Promise<PreviaFatura> {
   const assinatura = await prisma.assinatura.findFirstOrThrow({
     where: { id: assinaturaId, empresaId },
-    include: { cliente: true, plano: true },
+    include: { cliente: true, itemCatalogo: true },
   });
 
   const [vendasAvulsas, cobrancaExistente] = await Promise.all([
@@ -74,7 +74,7 @@ export async function calcularPreviaFatura(
     clienteEmail: assinatura.cliente.email,
     clienteDocumento: assinatura.cliente.documento,
     clienteTelefone: assinatura.cliente.telefone,
-    planoNome: assinatura.plano.nome,
+    nomeMensalidade: assinatura.itemCatalogo.nome,
     valorMensalidade,
     vendasAvulsas: vendasAvulsas.map((v) => ({
       id: v.id,
@@ -156,7 +156,7 @@ export async function gerarFaturaMensal(
       cobrancaId: cobranca.id,
       empresaId,
       valor: previa.valorTotal,
-      descricao: `Fatura ${referenciaMes} — ${previa.planoNome} (${previa.clienteNome})`,
+      descricao: `Fatura ${referenciaMes} — ${previa.nomeMensalidade} (${previa.clienteNome})`,
       clienteNome: previa.clienteNome,
       clienteEmail: previa.clienteEmail ?? undefined,
       clienteDocumento: previa.clienteDocumento ?? undefined,

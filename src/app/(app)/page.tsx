@@ -45,7 +45,7 @@ export default async function DashboardPage() {
       where: { dataHoraInicio: { gte: new Date() }, status: { in: ["AGENDADO", "CONFIRMADO"] } },
       orderBy: { dataHoraInicio: "asc" },
       take: 5,
-      include: { cliente: true, animal: true, servico: true },
+      include: { cliente: true, animal: true, itemCatalogo: true },
     }),
   ]);
 
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
               <li key={a.id} className="py-2.5 flex justify-between text-sm">
                 <span>
                   <strong>{a.cliente.nome}</strong> · {a.animal.nome}
-                  {a.servico ? ` · ${a.servico.nome}` : ""}
+                  {a.itemCatalogo ? ` · ${a.itemCatalogo.nome}` : ""}
                 </span>
                 <span className="text-gray-500">{formatDateTime(a.dataHoraInicio)}</span>
               </li>

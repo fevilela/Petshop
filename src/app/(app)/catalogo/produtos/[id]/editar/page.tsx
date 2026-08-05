@@ -5,8 +5,8 @@ import { updateProduto } from "../../../actions";
 
 export default async function EditarProdutoPage({ params }: { params: { id: string } }) {
   const { prisma } = await getSessionTenantPrisma();
-  const produto = await prisma.produto.findUnique({ where: { id: params.id } });
-  if (!produto) notFound();
+  const produto = await prisma.itemCatalogo.findUnique({ where: { id: params.id } });
+  if (!produto || produto.tipo !== "PRODUTO") notFound();
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold text-gray-900">Editar produto</h1>

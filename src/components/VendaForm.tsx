@@ -5,18 +5,23 @@ import { formatCurrency } from "@/lib/utils";
 
 type Cliente = { id: string; nome: string };
 type Animal = { id: string; nome: string; clienteId: string };
-type Catalogo = { id: string; nome: string; preco: number };
-type Assinatura = { id: string; clienteId: string; planoNome: string };
+type TipoCatalogo = "PRODUTO" | "SERVICO" | "MENSALIDADE";
+type ItemCatalogo = { id: string; tipo: TipoCatalogo; nome: string; preco: number };
+type Assinatura = { id: string; clienteId: string; nomeMensalidade: string };
 
 type ItemCarrinho = {
   key: string;
-  tipo: "PRODUTO" | "SERVICO";
-  id: string;
+  itemCatalogoId: string;
+  tipo: TipoCatalogo;
   nome: string;
   preco: number;
   quantidade: number;
 };
 
+// MENSALISTA (a antiga forma "incluso no plano, grátis") foi retirada daqui
+// de propósito — o conceito foi removido (ver prisma/schema.prisma). O
+// enum no banco continua tendo esse valor só por causa de vendas antigas
+// já gravadas; a tela não oferece mais essa opção.
 const FORMAS_PAGAMENTO: { value: string; label: string }[] = [
   { value: "DINHEIRO", label: "Dinheiro" },
   { value: "PIX_MANUAL", label: "Pix (manual, fora do sistema)" },
@@ -24,25 +29,26 @@ const FORMAS_PAGAMENTO: { value: string; label: string }[] = [
   { value: "PIX_MERCADOPAGO", label: "Pix via Mercado Pago (gera QR Code)" },
   { value: "BOLETO", label: "Boleto (Mercado Pago)" },
   { value: "CARTAO_LINK", label: "Link de pagamento (Mercado Pago)" },
-  { value: "MENSALISTA", label: "Mensalista (debitar do plano)" },
-  { value: "A_FATURAR", label: "Lançar na fatura mensal (mensalista, cobra depois)" },
+  { value: "A_FATURAR", label: "Mensalista (cobra na fatura mensal)" },
 ];
 
-const FORMAS_QUE_EXIGEM_ASSINATURA = new Set(["MENSALISTA", "A_FATURAR"]);
+const TIPO_LABEL: Record<TipoCatalogo, string> = {
+  PRODUTO: "produto",
+  SERVICO: "serviço",
+  MENSALIDADE: "mensalidade",
+};
 
 export default function VendaForm({
   action,
   clientes,
   animais,
-  produtos,
-  servicos,
+  catalogo,
   assinaturas,
 }: {
   action: (formData: FormData) => Promise<void>;
   clientes: Cliente[];
   animais: Animal[];
-  produtos: Catalogo[];
-  servicos: Catalogo[];
+  catalogo: ItemCatalogo[];
   assinaturas: Assinatura[];
 }) {
   const [clienteId, setClienteId] = useState("");
@@ -52,24 +58,54 @@ export default function VendaForm({
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [catalogoSelecionado, setCatalogoSelecionado] = useState("");
   const [quantidade, setQuantidade] = useState(1);
+  const [avisoCarrinho, setAvisoCarrinho] = useState("");
+
+  const produtos = useMemo(() => catalogo.filter((c) => c.tipo === "PRODUTO"), [catalogo]);
+  const servicos = useMemo(() => catalogo.filter((c) => c.tipo === "SERVICO"), [catalogo]);
+  const mensalidades = useMemo(() => catalogo.filter((c) => c.tipo === "MENSALIDADE"), [catalogo]);
 
   const animaisDoCliente = useMemo(() => animais.filter((a) => a.clienteId === clienteId), [animais, clienteId]);
   const assinaturasDoCliente = useMemo(
     () => assinaturas.filter((a) => a.clienteId === clienteId),
     [assinaturas, clienteId]
   );
+  const clienteJaEhMensalista = assinaturasDoCliente.length > 0;
+  const carrinhoTemMensalidade = itens.some((i) => i.tipo === "MENSALIDADE");
 
-  const total = itens.reduce((acc, i) => acc + i.preco * i.quantidade, 0);
+  // Mensalidade não entra no total a pagar AGORA — vira Assinatura e a
+  // primeira cobrança dela sai na próxima fatura mensal, junto com as
+  // demais (ver src/lib/assinatura.ts e src/lib/faturamento.ts).
+  const totalPagar = itens.filter((i) => i.tipo !== "MENSALIDADE").reduce((acc, i) => acc + i.preco * i.quantidade, 0);
+  const itemMensalidade = itens.find((i) => i.tipo === "MENSALIDADE");
 
   function adicionarItem() {
+    setAvisoCarrinho("");
     if (!catalogoSelecionado) return;
-    const [tipo, id] = catalogoSelecionado.split(":") as ["PRODUTO" | "SERVICO", string];
-    const catalogo = (tipo === "PRODUTO" ? produtos : servicos).find((c) => c.id === id);
-    if (!catalogo) return;
+    const [tipo, id] = catalogoSelecionado.split(":") as [TipoCatalogo, string];
+    const item = catalogo.find((c) => c.id === id && c.tipo === tipo);
+    if (!item) return;
+
+    if (tipo === "MENSALIDADE") {
+      if (carrinhoTemMensalidade) {
+        setAvisoCarrinho("Só dá pra adicionar uma mensalidade por venda.");
+        return;
+      }
+      if (clienteJaEhMensalista) {
+        setAvisoCarrinho("Este cliente já é mensalista — cancele a assinatura atual antes de assinar outra.");
+        return;
+      }
+    }
 
     setItens((prev) => [
       ...prev,
-      { key: `${tipo}-${id}-${Date.now()}`, tipo, id, nome: catalogo.nome, preco: catalogo.preco, quantidade },
+      {
+        key: `${tipo}-${id}-${Date.now()}`,
+        itemCatalogoId: id,
+        tipo,
+        nome: item.nome,
+        preco: item.preco,
+        quantidade: tipo === "MENSALIDADE" ? 1 : quantidade,
+      },
     ]);
     setCatalogoSelecionado("");
     setQuantidade(1);
@@ -80,8 +116,10 @@ export default function VendaForm({
   }
 
   const itensJson = JSON.stringify(
-    itens.map((i) => ({ tipo: i.tipo, id: i.id, quantidade: i.quantidade }))
+    itens.map((i) => ({ itemCatalogoId: i.itemCatalogoId, quantidade: i.quantidade }))
   );
+
+  const precisaAssinaturaExistente = formaPagamento === "A_FATURAR";
 
   return (
     <form action={action} className="space-y-6">
@@ -124,9 +162,14 @@ export default function VendaForm({
           >
             {FORMAS_PAGAMENTO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
           </select>
+          {totalPagar === 0 && itens.length > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              Nada a cobrar nesta venda (só mensalidade) — a forma de pagamento aqui não tem efeito.
+            </p>
+          )}
         </div>
 
-        {FORMAS_QUE_EXIGEM_ASSINATURA.has(formaPagamento) && (
+        {precisaAssinaturaExistente && (
           <div>
             <label className="label" htmlFor="assinaturaId">Assinatura do cliente *</label>
             <select
@@ -138,7 +181,7 @@ export default function VendaForm({
               required
             >
               <option value="">Selecione...</option>
-              {assinaturasDoCliente.map((a) => <option key={a.id} value={a.id}>{a.planoNome}</option>)}
+              {assinaturasDoCliente.map((a) => <option key={a.id} value={a.id}>{a.nomeMensalidade}</option>)}
             </select>
             {clienteId && assinaturasDoCliente.length === 0 && (
               <p className="text-xs text-amber-700 mt-1">Este cliente não possui assinatura ativa.</p>
@@ -155,9 +198,9 @@ export default function VendaForm({
       <div className="card p-6">
         <h2 className="font-medium text-gray-900 mb-3">Itens da venda</h2>
 
-        <div className="flex flex-wrap gap-2 items-end mb-4">
+        <div className="flex flex-wrap gap-2 items-end mb-2">
           <div className="flex-1 min-w-[220px]">
-            <label className="label">Produto ou serviço</label>
+            <label className="label">Produto, serviço ou mensalidade</label>
             <select className="input" value={catalogoSelecionado} onChange={(e) => setCatalogoSelecionado(e.target.value)}>
               <option value="">Selecione...</option>
               <optgroup label="Produtos">
@@ -170,24 +213,41 @@ export default function VendaForm({
                   <option key={s.id} value={`SERVICO:${s.id}`}>{s.nome} — {formatCurrency(s.preco)}</option>
                 ))}
               </optgroup>
+              <optgroup label="Mensalidades (assina o cliente)">
+                {mensalidades.map((m) => (
+                  <option key={m.id} value={`MENSALIDADE:${m.id}`}>{m.nome} — {formatCurrency(m.preco)}/mês</option>
+                ))}
+              </optgroup>
             </select>
           </div>
           <div className="w-24">
             <label className="label">Qtd.</label>
-            <input type="number" min={1} className="input" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value))} />
+            <input
+              type="number"
+              min={1}
+              className="input"
+              value={quantidade}
+              onChange={(e) => setQuantidade(Number(e.target.value))}
+              disabled={catalogoSelecionado.startsWith("MENSALIDADE:")}
+            />
           </div>
           <button type="button" className="btn-secondary" onClick={adicionarItem}>+ Adicionar</button>
         </div>
+
+        {avisoCarrinho && <p className="text-sm text-amber-700 mb-3">{avisoCarrinho}</p>}
 
         <table className="table-base">
           <thead><tr><th>Item</th><th>Qtd.</th><th>Preço</th><th>Subtotal</th><th></th></tr></thead>
           <tbody>
             {itens.map((i) => (
               <tr key={i.key}>
-                <td>{i.nome} <span className="text-gray-400">({i.tipo === "PRODUTO" ? "produto" : "serviço"})</span></td>
+                <td>{i.nome} <span className="text-gray-400">({TIPO_LABEL[i.tipo]})</span></td>
                 <td>{i.quantidade}</td>
                 <td>{formatCurrency(i.preco)}</td>
-                <td>{formatCurrency(i.preco * i.quantidade)}</td>
+                <td>
+                  {formatCurrency(i.preco * i.quantidade)}
+                  {i.tipo === "MENSALIDADE" && <span className="text-xs text-gray-400"> (na fatura)</span>}
+                </td>
                 <td className="text-right">
                   <button type="button" className="text-red-600 hover:underline text-sm" onClick={() => removerItem(i.key)}>Remover</button>
                 </td>
@@ -199,7 +259,13 @@ export default function VendaForm({
           </tbody>
         </table>
 
-        <div className="text-right mt-3 font-semibold text-lg">Total: {formatCurrency(total)}</div>
+        {itemMensalidade && (
+          <p className="text-sm text-gray-500 mt-3">
+            "{itemMensalidade.nome}" assina o cliente à mensalidade — a primeira cobrança
+            ({formatCurrency(itemMensalidade.preco)}) entra na próxima fatura mensal, não nesta venda.
+          </p>
+        )}
+        <div className="text-right mt-3 font-semibold text-lg">Total a pagar agora: {formatCurrency(totalPagar)}</div>
       </div>
 
       <input type="hidden" name="itensJson" value={itensJson} />

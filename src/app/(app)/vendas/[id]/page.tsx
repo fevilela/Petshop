@@ -18,7 +18,7 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
       cliente: true,
       animal: true,
       criadoPor: true,
-      itens: { include: { produto: true, servico: true, animal: true } },
+      itens: { include: { itemCatalogo: true, animal: true } },
       cobranca: true,
     },
   });
@@ -78,7 +78,12 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
           <tbody>
             {venda.itens.map((item) => (
               <tr key={item.id}>
-                <td>{item.produto?.nome ?? item.servico?.nome ?? "—"}</td>
+                <td>
+                  {item.itemCatalogo.nome}
+                  {item.itemCatalogo.tipo === "MENSALIDADE" && (
+                    <span className="text-xs text-gray-400"> (assinatura — na fatura)</span>
+                  )}
+                </td>
                 <td>{item.animal?.nome ?? "—"}</td>
                 <td>{item.quantidade}</td>
                 <td>{formatCurrency(Number(item.precoUnitario))}</td>

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { normalizePhoneE164 } from "@/lib/utils";
+import { criarAssinatura } from "@/lib/assinatura";
 
 const clienteSchema = z.object({
   nome: z.string().min(2, "Informe o nome completo"),
@@ -26,6 +27,26 @@ function parseForm(formData: FormData) {
   });
 }
 
+/**
+ * Lê os campos opcionais de "virar mensalista" do form do cliente (ver
+ * ClienteForm.tsx) — presentes só quando o checkbox "é mensalista" está
+ * marcado. `undefined` quando o cliente não está assinando nada por este
+ * formulário (cliente comum, ou já é mensalista e o form mostrou o card de
+ * assinatura ativa em vez do checkbox).
+ */
+function lerAssinaturaDoForm(formData: FormData) {
+  if (formData.get("mensalista") !== "on") return undefined;
+  const itemCatalogoId = formData.get("itemCatalogoId");
+  if (!itemCatalogoId || typeof itemCatalogoId !== "string") return undefined;
+  const valorMensal = formData.get("valorMensal");
+  const diaCobranca = formData.get("diaCobranca");
+  return {
+    itemCatalogoId,
+    valorMensal: valorMensal ? Number(valorMensal) : undefined,
+    diaCobranca: diaCobranca ? Number(diaCobranca) : undefined,
+  };
+}
+
 export async function createCliente(formData: FormData) {
   const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
@@ -34,22 +55,37 @@ export async function createCliente(formData: FormData) {
   // injetando em runtime) porque o TIPO gerado pelo Prisma para `create`
   // exige o campo obrigatório do schema — a extension só relaxa isso em
   // runtime, não no tipo estático que o TypeScript checa no build.
-  await prisma.cliente.create({
+  const cliente = await prisma.cliente.create({
     data: { ...data, empresaId, telefone: normalizePhoneE164(data.telefone) },
   });
+
+  // Fora da criação do cliente de propósito: se isso falhar (ex: mensalidade
+  // inválida), o cliente já foi criado com sucesso — não faz sentido
+  // desfazer o cadastro por causa disso. Quem cadastrou pode tentar assinar
+  // de novo em /clientes/[id]/editar. Erro vira a tela genérica (ver
+  // src/app/(app)/error.tsx), não é silencioso.
+  const dadosAssinatura = lerAssinaturaDoForm(formData);
+  if (dadosAssinatura) {
+    await criarAssinatura({ prisma, empresaId, clienteId: cliente.id, ...dadosAssinatura });
+  }
 
   revalidatePath("/clientes");
   redirect("/clientes");
 }
 
 export async function updateCliente(id: string, formData: FormData) {
-  const { prisma } = await getSessionTenantPrisma();
+  const { prisma, empresaId } = await getSessionTenantPrisma();
   const data = parseForm(formData);
 
   await prisma.cliente.update({
     where: { id },
     data: { ...data, telefone: normalizePhoneE164(data.telefone) },
   });
+
+  const dadosAssinatura = lerAssinaturaDoForm(formData);
+  if (dadosAssinatura) {
+    await criarAssinatura({ prisma, empresaId, clienteId: id, ...dadosAssinatura });
+  }
 
   revalidatePath("/clientes");
   redirect("/clientes");

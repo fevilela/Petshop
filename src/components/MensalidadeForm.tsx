@@ -2,37 +2,36 @@ type Props = {
   action: (formData: FormData) => Promise<void>;
   defaultValues?: {
     nome?: string;
-    categoria?: string | null;
     descricao?: string | null;
     preco?: unknown;
-    estoque?: number | null;
-    sku?: string | null;
+    diaCobrancaPadrao?: number | null;
   };
 };
 
-export default function ProdutoForm({ action, defaultValues }: Props) {
+export default function MensalidadeForm({ action, defaultValues }: Props) {
   return (
     <form action={action} className="card p-6 space-y-4 max-w-xl">
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="sm:col-span-2">
           <label className="label" htmlFor="nome">Nome *</label>
-          <input id="nome" name="nome" className="input" defaultValue={defaultValues?.nome} required />
+          <input id="nome" name="nome" className="input" placeholder="Banho Mensal 4x, Plano Completo..." defaultValue={defaultValues?.nome} required />
         </div>
         <div>
-          <label className="label" htmlFor="categoria">Categoria</label>
-          <input id="categoria" name="categoria" className="input" defaultValue={defaultValues?.categoria ?? ""} />
-        </div>
-        <div>
-          <label className="label" htmlFor="sku">SKU / código</label>
-          <input id="sku" name="sku" className="input" defaultValue={defaultValues?.sku ?? ""} />
-        </div>
-        <div>
-          <label className="label" htmlFor="preco">Preço (R$) *</label>
+          <label className="label" htmlFor="preco">Valor mensal (R$) *</label>
           <input id="preco" name="preco" type="number" step="0.01" className="input" defaultValue={defaultValues?.preco ? String(defaultValues.preco) : ""} required />
         </div>
         <div>
-          <label className="label" htmlFor="estoque">Estoque</label>
-          <input id="estoque" name="estoque" type="number" className="input" defaultValue={defaultValues?.estoque ?? 0} />
+          <label className="label" htmlFor="diaCobrancaPadrao">Dia de cobrança padrão</label>
+          <input
+            id="diaCobrancaPadrao"
+            name="diaCobrancaPadrao"
+            type="number"
+            min={1}
+            max={28}
+            className="input"
+            defaultValue={defaultValues?.diaCobrancaPadrao ?? 5}
+          />
+          <p className="text-xs text-gray-500 mt-1">Pode ser customizado por assinante ao assinar.</p>
         </div>
         <div className="sm:col-span-2">
           <label className="label" htmlFor="descricao">Descrição</label>

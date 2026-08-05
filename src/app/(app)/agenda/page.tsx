@@ -20,7 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 type AgendamentoComRelacoes = Prisma.AgendamentoGetPayload<{
-  include: { cliente: true; animal: true; servico: true; canil: true };
+  include: { cliente: true; animal: true; itemCatalogo: true; canil: true };
 }>;
 
 export default async function AgendaPage() {
@@ -28,7 +28,7 @@ export default async function AgendaPage() {
   const agendamentos: AgendamentoComRelacoes[] = await prisma.agendamento.findMany({
     where: { dataHoraInicio: { gte: new Date(new Date().setDate(new Date().getDate() - 1)) } },
     orderBy: { dataHoraInicio: "asc" },
-    include: { cliente: true, animal: true, servico: true, canil: true },
+    include: { cliente: true, animal: true, itemCatalogo: true, canil: true },
     take: 100,
   });
 
@@ -50,7 +50,7 @@ export default async function AgendaPage() {
                 <td>{formatDateTime(a.dataHoraInicio)}</td>
                 <td>{a.cliente.nome}</td>
                 <td>{a.animal.nome}</td>
-                <td>{a.servico?.nome ?? (a.canil ? `Hospedagem · ${a.canil.identificador}` : "—")}</td>
+                <td>{a.itemCatalogo?.nome ?? (a.canil ? `Hospedagem · ${a.canil.identificador}` : "—")}</td>
                 <td><span className={`badge ${STATUS_BADGE[a.status]}`}>{STATUS_LABEL[a.status]}</span></td>
                 <td className="text-right">
                   <AgendamentoStatusActions id={a.id} status={a.status} />

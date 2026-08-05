@@ -6,7 +6,8 @@ const prisma = new PrismaClient();
 /**
  * Seed único: cria o usuário SUPER_ADMIN (você, dona da plataforma) e, para
  * facilitar o desenvolvimento local, uma empresa de demonstração com alguns
- * dados de exemplo (cliente, animal, canil, produto, serviço, plano).
+ * dados de exemplo (cliente, animal, canil, e um item de catálogo de cada
+ * tipo: produto, serviço e mensalidade).
  *
  * Defina no seu .env antes de rodar (ou ajuste os valores default abaixo):
  *   SUPER_ADMIN_EMAIL
@@ -81,12 +82,15 @@ async function main() {
     create: { empresaId: empresa.id, identificador: "Canil 01", capacidade: 1, tipoPorte: "MEDIO" },
   });
 
-  const banho = await prisma.servico.upsert({
+  // Catálogo unificado (ver model ItemCatalogo em schema.prisma): serviço,
+  // produto e mensalidade são o mesmo model, diferenciados por `tipo`.
+  await prisma.itemCatalogo.upsert({
     where: { id: "seed-servico-banho" },
     update: {},
     create: {
       id: "seed-servico-banho",
       empresaId: empresa.id,
+      tipo: "SERVICO",
       nome: "Banho",
       categoria: "Estética",
       preco: 60,
@@ -94,12 +98,13 @@ async function main() {
     },
   });
 
-  await prisma.produto.upsert({
+  await prisma.itemCatalogo.upsert({
     where: { id: "seed-produto-racao" },
     update: {},
     create: {
       id: "seed-produto-racao",
       empresaId: empresa.id,
+      tipo: "PRODUTO",
       nome: "Ração Premium 10kg",
       categoria: "Alimentação",
       preco: 189.9,
@@ -107,16 +112,16 @@ async function main() {
     },
   });
 
-  const plano = await prisma.plano.upsert({
-    where: { id: "seed-plano-banho-mensal" },
+  const mensalidade = await prisma.itemCatalogo.upsert({
+    where: { id: "seed-mensalidade-banho" },
     update: {},
     create: {
-      id: "seed-plano-banho-mensal",
+      id: "seed-mensalidade-banho",
       empresaId: empresa.id,
+      tipo: "MENSALIDADE",
       nome: "Banho Mensal 4x",
-      valorMensal: 200,
+      preco: 200,
       diaCobrancaPadrao: 5,
-      itens: { create: [{ empresaId: empresa.id, servicoId: banho.id, quantidade: 4 }] },
     },
   });
 
@@ -127,9 +132,9 @@ async function main() {
       id: "seed-assinatura-1",
       empresaId: empresa.id,
       clienteId: cliente.id,
-      planoId: plano.id,
-      valorMensal: plano.valorMensal,
-      diaCobranca: plano.diaCobrancaPadrao,
+      itemCatalogoId: mensalidade.id,
+      valorMensal: mensalidade.preco,
+      diaCobranca: mensalidade.diaCobrancaPadrao ?? 5,
     },
   });
 

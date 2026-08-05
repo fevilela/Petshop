@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 type Cliente = { id: string; nome: string };
 type Animal = { id: string; nome: string; clienteId: string };
-type Servico = { id: string; nome: string };
+type ItemCatalogoServico = { id: string; nome: string };
 type Canil = { id: string; identificador: string };
 
 export default function AgendaForm({
@@ -17,7 +17,7 @@ export default function AgendaForm({
   action: (formData: FormData) => Promise<void>;
   clientes: Cliente[];
   animais: Animal[];
-  servicos: Servico[];
+  servicos: ItemCatalogoServico[];
   canis: Canil[];
 }) {
   const [clienteId, setClienteId] = useState("");
@@ -41,8 +41,8 @@ export default function AgendaForm({
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="servicoId">Serviço</label>
-          <select id="servicoId" name="servicoId" className="input">
+          <label className="label" htmlFor="itemCatalogoId">Serviço</label>
+          <select id="itemCatalogoId" name="itemCatalogoId" className="input">
             <option value="">—</option>
             {servicos.map((s) => <option key={s.id} value={s.id}>{s.nome}</option>)}
           </select>

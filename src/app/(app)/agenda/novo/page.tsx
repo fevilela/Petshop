@@ -7,7 +7,7 @@ export default async function NovoAgendamentoPage() {
   const [clientes, animais, servicos, canis] = await Promise.all([
     prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.animal.findMany({ where: { ativo: true }, select: { id: true, nome: true, clienteId: true } }),
-    prisma.servico.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.itemCatalogo.findMany({ where: { ativo: true, tipo: "SERVICO" }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
     prisma.canil.findMany({ orderBy: { identificador: "asc" }, select: { id: true, identificador: true } }),
   ]);
 

@@ -8,7 +8,7 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 const agendamentoSchema = z.object({
   clienteId: z.string().min(1, "Selecione o cliente"),
   animalId: z.string().min(1, "Selecione o animal"),
-  servicoId: z.string().optional(),
+  itemCatalogoId: z.string().optional(),
   canilId: z.string().optional(),
   dataHoraInicio: z.string().min(1, "Informe a data e hora"),
   dataHoraFim: z.string().optional(),
@@ -20,7 +20,7 @@ export async function createAgendamento(formData: FormData) {
   const data = agendamentoSchema.parse({
     clienteId: formData.get("clienteId"),
     animalId: formData.get("animalId"),
-    servicoId: formData.get("servicoId") || undefined,
+    itemCatalogoId: formData.get("itemCatalogoId") || undefined,
     canilId: formData.get("canilId") || undefined,
     dataHoraInicio: formData.get("dataHoraInicio"),
     dataHoraFim: formData.get("dataHoraFim") || undefined,
@@ -31,7 +31,7 @@ export async function createAgendamento(formData: FormData) {
   // compartilhado — ver nota em vendas/actions.ts).
   await prisma.cliente.findUniqueOrThrow({ where: { id: data.clienteId } });
   await prisma.animal.findUniqueOrThrow({ where: { id: data.animalId } });
-  if (data.servicoId) await prisma.servico.findUniqueOrThrow({ where: { id: data.servicoId } });
+  if (data.itemCatalogoId) await prisma.itemCatalogo.findUniqueOrThrow({ where: { id: data.itemCatalogoId } });
   if (data.canilId) await prisma.canil.findUniqueOrThrow({ where: { id: data.canilId } });
 
   await prisma.agendamento.create({
@@ -39,7 +39,7 @@ export async function createAgendamento(formData: FormData) {
       empresaId,
       clienteId: data.clienteId,
       animalId: data.animalId,
-      servicoId: data.servicoId,
+      itemCatalogoId: data.itemCatalogoId,
       canilId: data.canilId,
       dataHoraInicio: new Date(data.dataHoraInicio),
       dataHoraFim: data.dataHoraFim ? new Date(data.dataHoraFim) : undefined,
