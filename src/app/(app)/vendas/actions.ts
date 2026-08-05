@@ -7,7 +7,7 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { prisma as sharedPrisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
-import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
+import { verificarPagamentoCobranca, marcarCobrancaNotificada, cancelarCobranca } from "@/lib/cobranca";
 import { criarAssinatura } from "@/lib/assinatura";
 import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 
@@ -320,6 +320,23 @@ export async function marcarNotificadoAction(cobrancaId: string) {
   const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
 
   await marcarCobrancaNotificada(empresaId, cobrancaId);
+
+  revalidatePath("/vendas");
+  if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);
+}
+
+/**
+ * Cancela uma cobrança ainda pendente (venda avulsa) — ver cancelarCobranca
+ * em src/lib/cobranca.ts pro que isso faz e por que não cobre cobrança já paga.
+ */
+export async function cancelarCobrancaAction(cobrancaId: string) {
+  const { prisma, empresaId } = await getSessionTenantPrisma();
+  const cobranca = await prisma.cobranca.findUniqueOrThrow({ where: { id: cobrancaId } });
+
+  const resultado = await cancelarCobranca(empresaId, cobrancaId);
+  if (!resultado.ok) {
+    throw new Error(resultado.motivo);
+  }
 
   revalidatePath("/vendas");
   if (cobranca.vendaId) revalidatePath(`/vendas/${cobranca.vendaId}`);

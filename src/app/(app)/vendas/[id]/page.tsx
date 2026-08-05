@@ -4,7 +4,7 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import CobrancaPainel from "@/components/CobrancaPainel";
 import { FORMA_LABEL } from "@/lib/cobranca-labels";
-import { marcarCobrancaPaga, verificarPagamentoAction, marcarNotificadoAction } from "../actions";
+import { marcarCobrancaPaga, verificarPagamentoAction, marcarNotificadoAction, cancelarCobrancaAction } from "../actions";
 
 /** Formas de pagamento que deveriam ter gerado uma Cobrança via Mercado Pago. */
 const FORMAS_COM_COBRANCA = ["BOLETO", "PIX_MERCADOPAGO", "CARTAO_LINK"];
@@ -118,6 +118,7 @@ export default async function VendaDetalhePage({ params }: { params: { id: strin
             marcarPagaAction={marcarCobrancaPaga.bind(null, cobranca.id)}
             verificarPagamentoAction={verificarPagamentoAction.bind(null, cobranca.id)}
             marcarNotificadoAction={marcarNotificadoAction.bind(null, cobranca.id)}
+            cancelarAction={cancelarCobrancaAction.bind(null, cobranca.id)}
             avisoFalhaGeracao="Não foi possível gerar essa cobrança no Mercado Pago (token não configurado ou chamada falhou). Confira as credenciais em /configuracoes — depois disso é preciso registrar uma nova venda, esta cobrança não tem como ser regerada automaticamente."
           />
         )}

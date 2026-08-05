@@ -151,6 +151,26 @@ precisar de numeração sequencial por empresa começando em 1, isso exige um
 contador por tabela (Postgres não faz autoincrement agrupado nativamente) —
 não implementado agora.
 
+**Ciclo de vida da `Cobranca` e cancelamento:** `PENDENTE → PAGO` (manual,
+botão "Marcar paga", ou automático quando o Mercado Pago reporta `approved`
+via webhook/"Verificar pagamento agora") ou `PENDENTE → CANCELADO`. Esse
+segundo caminho tinha só o lado reativo (Mercado Pago reportando
+`cancelled`/`rejected`) até ganhar também um lado manual: botão "Cancelar
+cobrança" no painel (`cancelarCobranca` em `src/lib/cobranca.ts`), disponível
+só enquanto a cobrança está PENDENTE. Escopo deliberadamente limitado a
+cancelar pendente — **não existe estorno de cobrança já paga** (mexeria em
+dinheiro de verdade, com possível taxa do Mercado Pago; decisão explícita de
+não construir agora). Ao cancelar: Pix/Boleto chamam a Payments API pra
+cancelar o pagamento de verdade (`PUT /v1/payments/{id}`, só funciona
+enquanto `pending`/`in_process` do lado do Mercado Pago — se o cliente pagou
+nos segundos antes do clique, a API recusa e a cobrança **não** é marcada
+como cancelada localmente, pra não esconder um pagamento real; a mensagem de
+erro orienta usar "Verificar pagamento agora" primeiro); já o `CARTAO_LINK`
+não tem essa chamada porque o id salvo ali é de uma *preferência* de
+checkout, não de um pagamento — não existe o que cancelar no Mercado Pago
+até alguém efetivamente pagar pelo link, então só marcamos cancelado
+localmente.
+
 ## Rodando localmente
 
 ```bash

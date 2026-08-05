@@ -68,6 +68,7 @@ export default async function PlanoDetalhePage({ params }: { params: { id: strin
                 <DeleteButton
                   action={cancelarAssinatura.bind(null, a.id)}
                   confirmMessage={`Cancelar assinatura de ${a.cliente.nome}?`}
+                  label="Cancelar assinatura"
                 />
               )}
             </li>

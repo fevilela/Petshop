@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { gerarFaturaMensal, referenciaMesAtual } from "@/lib/faturamento";
-import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
+import { verificarPagamentoCobranca, marcarCobrancaNotificada, cancelarCobranca } from "@/lib/cobranca";
 
 /**
  * Gera (ou, se já existir, só abre) a fatura do mês corrente pra uma
@@ -45,6 +45,20 @@ export async function verificarPagamentoFaturaAction(cobrancaId: string) {
 export async function marcarFaturaNotificadaAction(cobrancaId: string) {
   const { empresaId } = await getSessionTenantPrisma();
   await marcarCobrancaNotificada(empresaId, cobrancaId);
+  revalidatePath("/planos/faturamento");
+  revalidatePath(`/planos/faturamento/${cobrancaId}`);
+}
+
+/**
+ * Cancela uma fatura ainda pendente — ver cancelarCobranca em
+ * src/lib/cobranca.ts pro que isso faz e por que não cobre fatura já paga.
+ */
+export async function cancelarFaturaAction(cobrancaId: string) {
+  const { empresaId } = await getSessionTenantPrisma();
+  const resultado = await cancelarCobranca(empresaId, cobrancaId);
+  if (!resultado.ok) {
+    throw new Error(resultado.motivo);
+  }
   revalidatePath("/planos/faturamento");
   revalidatePath(`/planos/faturamento/${cobrancaId}`);
 }

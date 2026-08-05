@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { consultarPagamento } from "@/lib/mercadopago";
+import { consultarPagamento, cancelarPagamento } from "@/lib/mercadopago";
 
 /**
  * Reconsulta uma Cobranca (de venda avulsa OU de fatura mensal consolidada
@@ -43,6 +43,61 @@ export async function verificarPagamentoCobranca(empresaId: string, cobrancaId: 
     // pro atendente, só não atualiza nada desta vez.
     console.error(`[cobranca] Falha ao verificar pagamento manualmente (cobranca ${cobrancaId}):`, err);
   }
+}
+
+/**
+ * Cancela uma Cobrança ainda PENDENTE (Pix, boleto ou link de pagamento) —
+ * uso do atendente quando a venda foi um engano, o cliente desistiu, ou a
+ * cobrança foi gerada errada. Escopo deliberadamente limitado a PENDENTE:
+ * cancelar uma cobrança já PAGA seria um estorno (mexe em dinheiro de
+ * verdade, pode ter taxa do Mercado Pago) — isso é uma feature separada,
+ * ainda não construída, tratada com mais cautela.
+ *
+ * Retorna `{ ok: false, motivo }` em vez de lançar em casos esperados
+ * (cobrança não está mais pendente, ou o Mercado Pago recusou o cancelamento
+ * porque o cliente acabou de pagar) — quem chama decide se propaga como erro
+ * pra tela. Diferente de `verificarPagamentoCobranca`, que engole erros
+ * silenciosamente por ser uma checagem em segundo plano: aqui o atendente
+ * clicou num botão esperando uma confirmação, então uma falha precisa
+ * aparecer pra ele.
+ */
+export async function cancelarCobranca(empresaId: string, cobrancaId: string): Promise<{ ok: boolean; motivo?: string }> {
+  const cobranca = await prisma.cobranca.findFirstOrThrow({ where: { id: cobrancaId, empresaId } });
+
+  if (cobranca.status !== "PENDENTE") {
+    return { ok: false, motivo: "Só é possível cancelar uma cobrança pendente." };
+  }
+
+  // PIX/BOLETO: mercadoPagoId é o id de um pagamento de verdade na Payments
+  // API, cancelável enquanto pendente. CARTAO_LINK: mercadoPagoId é o id de
+  // uma *preferência* de checkout — não existe pagamento pra cancelar até
+  // alguém efetivamente pagar por aquele link, então só marcamos cancelado
+  // localmente (o link continua existindo no Mercado Pago, mas paramos de
+  // divulgar/acompanhar ele por aqui).
+  if (cobranca.mercadoPagoId && cobranca.tipo !== "CARTAO_LINK") {
+    try {
+      const empresa = await prisma.empresa.findUniqueOrThrow({ where: { id: empresaId } });
+      if (empresa.mercadoPagoAccessTokenEnc) {
+        const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
+        await cancelarPagamento(accessToken, cobranca.mercadoPagoId);
+      }
+    } catch (err) {
+      // Não marcamos como cancelado aqui: se o Mercado Pago recusou (ex.: o
+      // cliente pagou nos últimos segundos, antes do clique do atendente),
+      // seria esconder um pagamento que pode ter ido de verdade. Melhor
+      // avisar e deixar o atendente conferir com "Verificar pagamento agora"
+      // antes de tentar cancelar de novo.
+      console.error(`[cobranca] Falha ao cancelar pagamento no Mercado Pago (cobranca ${cobrancaId}):`, err);
+      return {
+        ok: false,
+        motivo:
+          'Não foi possível cancelar no Mercado Pago (o cliente pode ter pago agora há pouco). Clique em "Verificar pagamento agora" antes de tentar cancelar de novo.',
+      };
+    }
+  }
+
+  await prisma.cobranca.update({ where: { id: cobrancaId }, data: { status: "CANCELADO" } });
+  return { ok: true };
 }
 
 /**

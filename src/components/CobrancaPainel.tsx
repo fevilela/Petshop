@@ -1,6 +1,7 @@
 import CopyButton from "@/components/CopyButton";
 import SelectableField from "@/components/SelectableField";
 import AbrirWhatsAppButton from "@/components/AbrirWhatsAppButton";
+import DeleteButton from "@/components/DeleteButton";
 import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
 import { COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "@/lib/cobranca-labels";
 
@@ -26,11 +27,12 @@ type CobrancaExibicao = {
  * que as duas são, no fundo, a mesma Cobranca só com origem diferente
  * (vendaId vs. assinaturaId+referenciaMes).
  *
- * `marcarPagaAction`/`verificarPagamentoAction`/`marcarNotificadoAction`
- * chegam já vinculadas (`.bind(null, cobranca.id)`) — Server Actions podem
- * ser passadas como prop tanto pra outro Server Component quanto para um
- * Client Component (caso de `marcarNotificadoAction`, repassada pra
- * AbrirWhatsAppButton) normalmente.
+ * `marcarPagaAction`/`verificarPagamentoAction`/`marcarNotificadoAction`/
+ * `cancelarAction` chegam já vinculadas (`.bind(null, cobranca.id)`) —
+ * Server Actions podem ser passadas como prop tanto pra outro Server
+ * Component quanto para um Client Component (caso de `marcarNotificadoAction`,
+ * repassada pra AbrirWhatsAppButton, e `cancelarAction`, repassada pra
+ * DeleteButton) normalmente.
  */
 export default function CobrancaPainel({
   cobranca,
@@ -39,6 +41,7 @@ export default function CobrancaPainel({
   marcarPagaAction,
   verificarPagamentoAction,
   marcarNotificadoAction,
+  cancelarAction,
   avisoFalhaGeracao,
 }: {
   cobranca: CobrancaExibicao;
@@ -47,6 +50,8 @@ export default function CobrancaPainel({
   marcarPagaAction: (formData: FormData) => Promise<void>;
   verificarPagamentoAction?: (formData: FormData) => Promise<void>;
   marcarNotificadoAction: () => Promise<void>;
+  /** Ausente = tela ainda não migrada; presente = mostra "Cancelar cobrança" (só enquanto PENDENTE). */
+  cancelarAction?: () => Promise<void>;
   avisoFalhaGeracao?: string;
 }) {
   return (
@@ -156,6 +161,13 @@ export default function CobrancaPainel({
             )}
             marcarNotificadoAction={marcarNotificadoAction}
           />
+          {cancelarAction && (
+            <DeleteButton
+              action={cancelarAction}
+              confirmMessage={'Cancelar esta cobrança? O cliente não deve mais pagar por este Pix/boleto/link — se ele já tiver pago, use "Verificar pagamento agora" antes de cancelar.'}
+              label="Cancelar cobrança"
+            />
+          )}
         </div>
       )}
     </div>

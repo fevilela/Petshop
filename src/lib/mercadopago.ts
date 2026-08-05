@@ -222,3 +222,32 @@ export async function consultarPagamento(accessToken: string, mercadoPagoId: str
   }
   return res.json();
 }
+
+/**
+ * Cancela um pagamento (Pix ou boleto) ainda pendente na Payments API do
+ * Mercado Pago (`PUT /v1/payments/{id}` com `status: cancelled`).
+ *
+ * Só funciona enquanto o pagamento estiver "pending"/"in_process" do lado do
+ * Mercado Pago — se o cliente pagou nos últimos segundos (corrida entre o
+ * clique do atendente e a confirmação do pagamento), a API recusa (400) e
+ * quem chama (ver cancelarCobranca em src/lib/cobranca.ts) trata isso como
+ * "não cancelou", sem marcar nada como cancelado localmente por engano.
+ *
+ * Não se aplica a CARTAO_LINK: o id ali é de uma *preferência* de checkout
+ * (`/checkout/preferences`), não de um pagamento — não existe "pagamento" pra
+ * cancelar até o cliente efetivamente pagar por aquele link. Quem chama trata
+ * esse caso separadamente (cancela só localmente).
+ */
+export async function cancelarPagamento(accessToken: string, mercadoPagoId: string): Promise<void> {
+  const res = await fetch(`${MP_API_URL}/v1/payments/${mercadoPagoId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: "cancelled" }),
+  });
+  if (!res.ok) {
+    throw new Error(`Falha ao cancelar pagamento ${mercadoPagoId}: ${res.status} ${await res.text()}`);
+  }
+}

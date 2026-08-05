@@ -3,7 +3,12 @@ import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDateTime } from "@/lib/utils";
 import CobrancaPainel from "@/components/CobrancaPainel";
-import { marcarFaturaPagaAction, verificarPagamentoFaturaAction, marcarFaturaNotificadaAction } from "../actions";
+import {
+  marcarFaturaPagaAction,
+  verificarPagamentoFaturaAction,
+  marcarFaturaNotificadaAction,
+  cancelarFaturaAction,
+} from "../actions";
 
 export default async function FaturaDetalhePage({ params }: { params: { cobrancaId: string } }) {
   const { prisma } = await getSessionTenantPrisma();
@@ -73,6 +78,7 @@ export default async function FaturaDetalhePage({ params }: { params: { cobranca
           marcarPagaAction={marcarFaturaPagaAction.bind(null, cobranca.id)}
           verificarPagamentoAction={verificarPagamentoFaturaAction.bind(null, cobranca.id)}
           marcarNotificadoAction={marcarFaturaNotificadaAction.bind(null, cobranca.id)}
+          cancelarAction={cancelarFaturaAction.bind(null, cobranca.id)}
           avisoFalhaGeracao="Não foi possível gerar o Pix desta fatura no Mercado Pago (token não configurado ou chamada falhou). Você ainda pode marcar como paga manualmente ou mandar o valor por outro meio."
         />
       </div>
