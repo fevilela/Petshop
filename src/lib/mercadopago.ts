@@ -52,6 +52,16 @@ type CriarCobrancaInput = {
   clienteNome: string;
   clienteEmail?: string;
   clienteDocumento?: string; // CPF, obrigatório para boleto
+  /** Obrigatório para boleto (ver criarBoleto) — validado antes de chegar aqui em src/lib/cliente-validacoes.ts. */
+  clienteEndereco?: {
+    cep: string;
+    logradouro: string;
+    numero: string;
+    complemento?: string | null;
+    bairro: string;
+    cidade: string;
+    uf: string;
+  };
   dataVencimento: Date;
 };
 
@@ -96,13 +106,19 @@ export async function criarPagamentoPix(accessToken: string, input: CriarCobranc
 
 /**
  * Gera um boleto (Payments API, payment_method_id "bolbradesco").
- * Requer CPF/CNPJ do cliente.
+ * Requer CPF/CNPJ e endereço completo do cliente — a API rejeita (400) sem
+ * isso; ver validarClienteParaBoleto em src/lib/cliente-validacoes.ts, que
+ * quem chama esta função já deveria ter checado antes.
  */
 export async function criarBoleto(accessToken: string, input: CriarCobrancaInput) {
   if (!input.clienteDocumento) {
     throw new Error("Documento (CPF/CNPJ) do cliente é obrigatório para gerar boleto.");
   }
+  if (!input.clienteEndereco) {
+    throw new Error("Endereço completo do cliente é obrigatório para gerar boleto.");
+  }
   const { firstName, lastName } = separarNome(input.clienteNome);
+  const endereco = input.clienteEndereco;
 
   const res = await fetch(`${MP_API_URL}/v1/payments`, {
     method: "POST",
@@ -125,6 +141,14 @@ export async function criarBoleto(accessToken: string, input: CriarCobrancaInput
         identification: {
           type: input.clienteDocumento.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF",
           number: input.clienteDocumento.replace(/\D/g, ""),
+        },
+        address: {
+          zip_code: endereco.cep.replace(/\D/g, ""),
+          street_name: endereco.logradouro,
+          street_number: endereco.numero,
+          neighborhood: endereco.bairro,
+          city: endereco.cidade,
+          federal_unit: endereco.uf,
         },
       },
     }),

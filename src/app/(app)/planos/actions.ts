@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 
 // Criar/editar mensalidade, gerenciar "itens inclusos" (PlanoItem) e
 // "assinar cliente a um plano" foram removidos daqui — ver:
@@ -41,10 +42,9 @@ export async function atualizarFormaCobranca(assinaturaId: string, formData: For
     include: { cliente: true },
   });
 
-  if (formaCobranca === "BOLETO" && !assinatura.cliente.documento) {
-    throw new Error(
-      `Não é possível cobrar por boleto: ${assinatura.cliente.nome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`
-    );
+  if (formaCobranca === "BOLETO") {
+    const erro = validarClienteParaBoleto(assinatura.cliente);
+    if (erro) throw new Error(erro);
   }
 
   await prisma.assinatura.update({ where: { id: assinaturaId }, data: { formaCobranca } });

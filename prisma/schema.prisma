@@ -196,7 +196,26 @@ model Cliente {
   documento     String?  // CPF ou CNPJ
   telefone      String   // WhatsApp, formato E.164 ex: 5511999998888
   email         String?
-  endereco      String?
+  endereco      String? // texto livre, exibição/observação — NÃO é o que o Boleto usa (ver campos abaixo)
+  // Endereço ESTRUTURADO, separado do campo livre acima de propósito: só a
+  // API de boleto do Mercado Pago exige isso (zip_code/street_name/
+  // street_number/neighborhood/city/federal_unit, todos obrigatórios —
+  // confirmado via erro real em produção, depois de já ter corrigido
+  // documento e nome/sobrenome separadamente). Deixar como campos à parte,
+  // todos opcionais no cadastro geral, evita forçar TODO cliente a
+  // preencher 6 campos de endereço só pra poder cadastrar — a validação
+  // (exigir tudo preenchido) só dispara quando Boleto é de fato escolhido,
+  // em três lugares: venda avulsa (vendas/actions.ts), criação de
+  // assinatura (src/lib/assinatura.ts) e geração de fatura
+  // (src/lib/faturamento.ts). Preenchidos no cadastro via CEP + busca
+  // automática (ViaCEP) — ver ClienteForm.tsx.
+  cep           String?
+  logradouro    String?
+  numero        String?
+  complemento   String?
+  bairro        String?
+  cidade        String?
+  uf            String?
   observacoes   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

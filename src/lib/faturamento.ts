@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 
 /**
  * Fatura mensal de um mensalista: mensalidade da Assinatura + soma das
@@ -27,6 +28,16 @@ export type PreviaFatura = {
   clienteNome: string;
   clienteEmail: string | null;
   clienteDocumento: string | null;
+  /** Endereço estruturado do cliente (necessário só se `formaCobranca`/o override for BOLETO — ver src/lib/cliente-validacoes.ts). */
+  clienteEndereco: {
+    cep: string | null;
+    logradouro: string | null;
+    numero: string | null;
+    complemento: string | null;
+    bairro: string | null;
+    cidade: string | null;
+    uf: string | null;
+  };
   clienteTelefone: string;
   nomeMensalidade: string;
   valorMensalidade: number;
@@ -75,6 +86,15 @@ export async function calcularPreviaFatura(
     clienteNome: assinatura.cliente.nome,
     clienteEmail: assinatura.cliente.email,
     clienteDocumento: assinatura.cliente.documento,
+    clienteEndereco: {
+      cep: assinatura.cliente.cep,
+      logradouro: assinatura.cliente.logradouro,
+      numero: assinatura.cliente.numero,
+      complemento: assinatura.cliente.complemento,
+      bairro: assinatura.cliente.bairro,
+      cidade: assinatura.cliente.cidade,
+      uf: assinatura.cliente.uf,
+    },
     clienteTelefone: assinatura.cliente.telefone,
     nomeMensalidade: assinatura.itemCatalogo.nome,
     valorMensalidade,
@@ -132,13 +152,11 @@ export async function gerarFaturaMensal(
 
   // Mesma regra aplicada na criação da assinatura (src/lib/assinatura.ts) e
   // em vendas avulsas — repetida aqui porque o override pontual pode pedir
-  // Boleto mesmo numa assinatura cuja preferência salva é Pix (documento
-  // pode ter sido cadastrado depois, ou nunca).
-  if (formaCobranca === "BOLETO" && !previa.clienteDocumento) {
-    return {
-      ok: false,
-      motivo: `Não é possível cobrar por boleto: ${previa.clienteNome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`,
-    };
+  // Boleto mesmo numa assinatura cuja preferência salva é Pix (documento/
+  // endereço podem ter sido cadastrados depois, ou nunca).
+  if (formaCobranca === "BOLETO") {
+    const erro = validarClienteParaBoleto({ nome: previa.clienteNome, documento: previa.clienteDocumento, ...previa.clienteEndereco });
+    if (erro) return { ok: false, motivo: erro };
   }
 
   const dataVencimento = new Date();
@@ -196,6 +214,23 @@ export async function gerarFaturaMensal(
       clienteNome: previa.clienteNome,
       clienteEmail: previa.clienteEmail ?? undefined,
       clienteDocumento: previa.clienteDocumento ?? undefined,
+      clienteEndereco:
+        previa.clienteEndereco.cep &&
+        previa.clienteEndereco.logradouro &&
+        previa.clienteEndereco.numero &&
+        previa.clienteEndereco.bairro &&
+        previa.clienteEndereco.cidade &&
+        previa.clienteEndereco.uf
+          ? {
+              cep: previa.clienteEndereco.cep,
+              logradouro: previa.clienteEndereco.logradouro,
+              numero: previa.clienteEndereco.numero,
+              complemento: previa.clienteEndereco.complemento,
+              bairro: previa.clienteEndereco.bairro,
+              cidade: previa.clienteEndereco.cidade,
+              uf: previa.clienteEndereco.uf,
+            }
+          : undefined,
       dataVencimento,
     };
 

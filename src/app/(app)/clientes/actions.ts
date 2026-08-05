@@ -14,6 +14,16 @@ const clienteSchema = z.object({
   email: z.string().email("E-mail inválido").optional().or(z.literal("")),
   endereco: z.string().optional(),
   observacoes: z.string().optional(),
+  // Endereço estruturado (ver comentário no schema, model Cliente) — todos
+  // opcionais aqui, só viram obrigatórios em código na hora de gerar um
+  // boleto (ver src/lib/cliente-validacoes.ts).
+  cep: z.string().optional(),
+  logradouro: z.string().optional(),
+  numero: z.string().optional(),
+  complemento: z.string().optional(),
+  bairro: z.string().optional(),
+  cidade: z.string().optional(),
+  uf: z.string().optional(),
 });
 
 function parseForm(formData: FormData) {
@@ -24,6 +34,13 @@ function parseForm(formData: FormData) {
     email: formData.get("email") || undefined,
     endereco: formData.get("endereco") || undefined,
     observacoes: formData.get("observacoes") || undefined,
+    cep: formData.get("cep") || undefined,
+    logradouro: formData.get("logradouro") || undefined,
+    numero: formData.get("numero") || undefined,
+    complemento: formData.get("complemento") || undefined,
+    bairro: formData.get("bairro") || undefined,
+    cidade: formData.get("cidade") || undefined,
+    uf: formData.get("uf") || undefined,
   });
 }
 

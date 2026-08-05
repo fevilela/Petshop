@@ -3,10 +3,21 @@
 import { useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 
 const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
 
-type Cliente = { id: string; nome: string; documento: string | null };
+type Cliente = {
+  id: string;
+  nome: string;
+  documento: string | null;
+  cep: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
+};
 type Animal = { id: string; nome: string; clienteId: string };
 type TipoCatalogo = "PRODUTO" | "SERVICO" | "MENSALIDADE";
 type ItemCatalogo = { id: string; tipo: TipoCatalogo; nome: string; preco: number };
@@ -280,7 +291,7 @@ export default function VendaForm({
                 value={formaCobrancaMensalidade}
                 onChange={(e) => setFormaCobrancaMensalidade(e.target.value)}
               >
-                {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || clienteSelecionado?.documento).map((op) => (
+                {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || (clienteSelecionado && !validarClienteParaBoleto(clienteSelecionado))).map((op) => (
                   <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
                 ))}
               </select>

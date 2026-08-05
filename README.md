@@ -119,9 +119,17 @@ assinatura é criada — precisa estar salva ali porque o cron gera a fatura
 sozinho, sem ninguém pra escolher nada na hora. Dá pra sobrescrever
 pontualmente ao gerar uma fatura específica manualmente em
 `/planos/faturamento` (não altera a preferência salva, vale só pra aquele
-mês). Boleto exige `Cliente.documento` — validado tanto na criação da
-assinatura quanto no momento de gerar a fatura (o override pode pedir
-Boleto numa assinatura cuja preferência salva é Pix).
+mês). Boleto exige `Cliente.documento` **e** endereço completo (`cep`,
+`logradouro`, `numero`, `bairro`, `cidade`, `uf`) — a API do Mercado Pago
+rejeita (400) sem os dois, confirmado em produção em três rodadas
+diferentes (documento → nome/sobrenome separados → endereço completo).
+Validado com `validarClienteParaBoleto` (`src/lib/cliente-validacoes.ts`)
+nos três lugares que podem gerar um boleto: venda avulsa, criação de
+assinatura e geração de fatura (o override pode pedir Boleto numa
+assinatura cuja preferência salva é Pix, então valida de novo lá também).
+Endereço é opcional no cadastro geral do cliente — só passa a ser exigido
+quando Boleto é de fato escolhido, com o CEP auto-preenchendo o resto via
+ViaCEP no formulário.
 
 Na tela de Vendas, um mensalista pode comprar algo extra durante o mês e
 escolher a forma de pagamento "Mensalista (cobra na fatura mensal)"

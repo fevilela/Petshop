@@ -1,3 +1,5 @@
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
+
 /**
  * Cria uma Assinatura (o que torna um cliente "mensalista") a partir de um
  * item do catálogo tipo MENSALIDADE. Compartilhado entre dois pontos de
@@ -38,17 +40,15 @@ export async function criarAssinatura(params: {
     throw new Error(`"${itemCatalogo.nome}" não é uma mensalidade.`);
   }
 
-  // Boleto exige CPF/CNPJ na API do Mercado Pago (mesma regra aplicada a
-  // vendas avulsas em vendas/actions.ts) — checar aqui, na criação da
-  // assinatura, evita que isso só quebre meses depois, na hora de gerar a
-  // fatura (pior ainda se for o cron, sem ninguém olhando pra tratar o erro).
+  // Boleto exige CPF/CNPJ + endereço completo na API do Mercado Pago (mesma
+  // regra aplicada a vendas avulsas em vendas/actions.ts) — checar aqui, na
+  // criação da assinatura, evita que isso só quebre meses depois, na hora
+  // de gerar a fatura (pior ainda se for o cron, sem ninguém olhando pra
+  // tratar o erro).
   if (formaCobranca === "BOLETO") {
     const cliente = await prisma.cliente.findFirstOrThrow({ where: { id: clienteId, empresaId } });
-    if (!cliente.documento) {
-      throw new Error(
-        `Não é possível cobrar por boleto: ${cliente.nome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`
-      );
-    }
+    const erro = validarClienteParaBoleto(cliente);
+    if (erro) throw new Error(erro);
   }
 
   const jaAssina = await prisma.assinatura.findFirst({

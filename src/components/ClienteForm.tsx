@@ -6,6 +6,16 @@ import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
 
 const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
 
+type Endereco = {
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
+};
+
 type Mensalidade = { id: string; nome: string; preco: number; diaCobrancaPadrao: number | null };
 type AssinaturaAtiva = {
   id: string;
@@ -24,6 +34,13 @@ type Props = {
     email?: string | null;
     endereco?: string | null;
     observacoes?: string | null;
+    cep?: string | null;
+    logradouro?: string | null;
+    numero?: string | null;
+    complemento?: string | null;
+    bairro?: string | null;
+    cidade?: string | null;
+    uf?: string | null;
   };
   /** Mensalidades ativas do catálogo, pra escolher qual assinar. */
   mensalidades: Mensalidade[];
@@ -51,6 +68,49 @@ export default function ClienteForm({
   const [itemCatalogoId, setItemCatalogoId] = useState("");
   const mensalidadeEscolhida = mensalidades.find((m) => m.id === itemCatalogoId);
 
+  const [documento, setDocumento] = useState(defaultValues?.documento ?? "");
+  const [endereco, setEndereco] = useState<Endereco>({
+    cep: defaultValues?.cep ?? "",
+    logradouro: defaultValues?.logradouro ?? "",
+    numero: defaultValues?.numero ?? "",
+    complemento: defaultValues?.complemento ?? "",
+    bairro: defaultValues?.bairro ?? "",
+    cidade: defaultValues?.cidade ?? "",
+    uf: defaultValues?.uf ?? "",
+  });
+  const [buscandoCep, setBuscandoCep] = useState(false);
+  // Habilita a opção Boleto nos seletores de forma de cobrança em tempo
+  // real, conforme o atendente vai preenchendo — não só com base no que já
+  // estava salvo (defaultValues), senão a opção ficaria desabilitada até a
+  // próxima vez que a página carregasse, mesmo com os dados já digitados
+  // aqui embaixo.
+  const podeBoleto = Boolean(
+    documento && endereco.cep && endereco.logradouro && endereco.numero && endereco.bairro && endereco.cidade && endereco.uf
+  );
+
+  /** Autopreenche rua/bairro/cidade/UF a partir do CEP (ViaCEP, gratuito, sem chave). Falha de rede/CEP inválido: usuário preenche manualmente, sem bloquear o form. */
+  async function buscarEnderecoPorCep(cepDigitado: string) {
+    const cepLimpo = cepDigitado.replace(/\D/g, "");
+    if (cepLimpo.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const data = await res.json();
+      if (data.erro) return;
+      setEndereco((prev) => ({
+        ...prev,
+        logradouro: data.logradouro || prev.logradouro,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        uf: data.uf || prev.uf,
+      }));
+    } catch {
+      // Rede falhou ou ViaCEP fora do ar — sem problema, os campos continuam editáveis manualmente.
+    } finally {
+      setBuscandoCep(false);
+    }
+  }
+
   return (
     <form action={action} className="card p-6 space-y-4 max-w-2xl">
       <div className="grid sm:grid-cols-2 gap-4">
@@ -71,8 +131,14 @@ export default function ClienteForm({
         </div>
         <div>
           <label className="label" htmlFor="documento">CPF / CNPJ</label>
-          <input id="documento" name="documento" className="input" defaultValue={defaultValues?.documento ?? ""} />
-          <p className="text-xs text-gray-500 mt-1">Obrigatório se algum dia for gerar boleto pra este cliente.</p>
+          <input
+            id="documento"
+            name="documento"
+            className="input"
+            value={documento}
+            onChange={(e) => setDocumento(e.target.value)}
+          />
+          <p className="text-xs text-gray-500 mt-1">Junto com o endereço abaixo, obrigatório se algum dia for gerar boleto pra este cliente.</p>
         </div>
         <div>
           <label className="label" htmlFor="email">E-mail</label>
@@ -85,6 +151,90 @@ export default function ClienteForm({
         <div className="sm:col-span-2">
           <label className="label" htmlFor="observacoes">Observações</label>
           <textarea id="observacoes" name="observacoes" className="input" rows={3} defaultValue={defaultValues?.observacoes ?? ""} />
+        </div>
+      </div>
+
+      <div className="border-t pt-4">
+        <h2 className="font-medium text-gray-900 mb-1">Endereço para boleto</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Só necessário se algum dia for gerar boleto pra este cliente (venda avulsa ou mensalidade) — Pix e Link de
+          pagamento não precisam disso. Digite o CEP que o resto preenche sozinho.
+        </p>
+        <div className="grid sm:grid-cols-4 gap-3">
+          <div>
+            <label className="label" htmlFor="cep">CEP</label>
+            <input
+              id="cep"
+              name="cep"
+              className="input"
+              placeholder="00000-000"
+              value={endereco.cep}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, cep: e.target.value }))}
+              onBlur={(e) => buscarEnderecoPorCep(e.target.value)}
+            />
+            {buscandoCep && <p className="text-xs text-gray-400 mt-1">Buscando...</p>}
+          </div>
+          <div className="sm:col-span-3">
+            <label className="label" htmlFor="logradouro">Rua</label>
+            <input
+              id="logradouro"
+              name="logradouro"
+              className="input"
+              value={endereco.logradouro}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, logradouro: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="numero">Número</label>
+            <input
+              id="numero"
+              name="numero"
+              className="input"
+              value={endereco.numero}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, numero: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="complemento">Complemento</label>
+            <input
+              id="complemento"
+              name="complemento"
+              className="input"
+              value={endereco.complemento}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, complemento: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="bairro">Bairro</label>
+            <input
+              id="bairro"
+              name="bairro"
+              className="input"
+              value={endereco.bairro}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, bairro: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="cidade">Cidade</label>
+            <input
+              id="cidade"
+              name="cidade"
+              className="input"
+              value={endereco.cidade}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, cidade: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="uf">UF</label>
+            <input
+              id="uf"
+              name="uf"
+              className="input"
+              maxLength={2}
+              value={endereco.uf}
+              onChange={(e) => setEndereco((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+            />
+          </div>
         </div>
       </div>
 
@@ -113,7 +263,7 @@ export default function ClienteForm({
                   className="input text-xs py-1 w-auto"
                   defaultValue={assinaturaAtiva.formaCobranca}
                 >
-                  {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || defaultValues?.documento).map((op) => (
+                  {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || podeBoleto).map((op) => (
                     <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
                   ))}
                 </select>
@@ -183,8 +333,8 @@ export default function ClienteForm({
                   <label className="label" htmlFor="formaCobranca">Forma de cobrança da fatura mensal</label>
                   <select id="formaCobranca" name="formaCobranca" className="input" defaultValue="PIX">
                     <option value="PIX">Pix</option>
-                    <option value="BOLETO" disabled={!defaultValues?.documento}>
-                      Boleto{!defaultValues?.documento ? " (precisa de CPF/CNPJ cadastrado)" : ""}
+                    <option value="BOLETO" disabled={!podeBoleto}>
+                      Boleto{!podeBoleto ? " (precisa de CPF/CNPJ + endereço completo)" : ""}
                     </option>
                     <option value="CARTAO_LINK">Link de pagamento</option>
                   </select>

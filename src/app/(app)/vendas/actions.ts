@@ -9,6 +9,7 @@ import { decrypt } from "@/lib/crypto";
 import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
 import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
 import { criarAssinatura } from "@/lib/assinatura";
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 
 const itemSchema = z.object({
   itemCatalogoId: z.string().min(1),
@@ -83,16 +84,15 @@ export async function createVenda(formData: FormData) {
   // (lança se o id não pertencer a esta empresa).
   const cliente = await prisma.cliente.findUniqueOrThrow({ where: { id: parsed.clienteId } });
 
-  // Boleto exige CPF/CNPJ na API do Mercado Pago (ver criarBoleto em
-  // src/lib/mercadopago.ts) — documento é opcional no cadastro do cliente,
-  // então sem essa checagem a venda era criada normalmente e só a cobrança
-  // falhava depois, silenciosamente (mensagem genérica na tela, sem deixar
-  // claro que o problema era o CPF/CNPJ faltando, não o Mercado Pago).
-  // Falhar aqui, antes de criar qualquer coisa, evita a venda "quebrada".
-  if (parsed.formaPagamento === "BOLETO" && !cliente.documento) {
-    throw new Error(
-      `Não é possível gerar boleto: ${cliente.nome} não tem CPF/CNPJ cadastrado. Edite o cliente em /clientes ou escolha outra forma de pagamento.`
-    );
+  // Boleto exige CPF/CNPJ + endereço completo na API do Mercado Pago (ver
+  // criarBoleto em src/lib/mercadopago.ts) — nenhum dos dois é obrigatório
+  // no cadastro do cliente, então sem essa checagem a venda era criada
+  // normalmente e só a cobrança falhava depois, silenciosamente (mensagem
+  // genérica na tela, sem deixar claro qual dado faltava). Falhar aqui,
+  // antes de criar qualquer coisa, evita a venda "quebrada".
+  if (parsed.formaPagamento === "BOLETO") {
+    const erro = validarClienteParaBoleto(cliente);
+    if (erro) throw new Error(erro);
   }
 
   if (parsed.animalId) {
@@ -238,6 +238,18 @@ export async function createVenda(formData: FormData) {
         clienteNome: cliente.nome,
         clienteEmail: cliente.email ?? undefined,
         clienteDocumento: cliente.documento ?? undefined,
+        clienteEndereco:
+          cliente.cep && cliente.logradouro && cliente.numero && cliente.bairro && cliente.cidade && cliente.uf
+            ? {
+                cep: cliente.cep,
+                logradouro: cliente.logradouro,
+                numero: cliente.numero,
+                complemento: cliente.complemento,
+                bairro: cliente.bairro,
+                cidade: cliente.cidade,
+                uf: cliente.uf,
+              }
+            : undefined,
         dataVencimento,
       };
 

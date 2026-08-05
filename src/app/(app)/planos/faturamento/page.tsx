@@ -1,11 +1,17 @@
 import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency } from "@/lib/utils";
-import { calcularPreviaFatura, referenciaMesAtual } from "@/lib/faturamento";
+import { calcularPreviaFatura, referenciaMesAtual, type PreviaFatura } from "@/lib/faturamento";
 import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
+import { validarClienteParaBoleto } from "@/lib/cliente-validacoes";
 import { gerarFaturaAction } from "./actions";
 
 const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
+
+/** Boleto só entra nas opções se o cliente já tiver tudo que a API do Mercado Pago exige (ver src/lib/cliente-validacoes.ts) — evita oferecer uma escolha que vai falhar. */
+function podeBoleto(p: PreviaFatura): boolean {
+  return !validarClienteParaBoleto({ nome: p.clienteNome, documento: p.clienteDocumento, ...p.clienteEndereco });
+}
 
 export default async function FaturamentoPage() {
   const { prisma, empresaId } = await getSessionTenantPrisma();
@@ -78,7 +84,7 @@ export default async function FaturamentoPage() {
                         className="input text-xs py-1"
                         title="Forma de cobrança desta fatura (não altera a preferência salva na assinatura)"
                       >
-                        {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || p.clienteDocumento).map((op) => (
+                        {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || podeBoleto(p)).map((op) => (
                           <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
                         ))}
                       </select>
