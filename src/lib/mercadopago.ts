@@ -26,6 +26,24 @@ function notificationUrl(empresaId: string): string {
   return `${appUrl}/api/webhooks/mercadopago/${empresaId}`;
 }
 
+/**
+ * Separa "nome completo" (único campo que o Cliente tem) em first_name/
+ * last_name — a API de boleto registrado do Mercado Pago exige os dois
+ * separados (erro 400 "the following parameters are required: payer.
+ * first_name, payer.last_name" se mandar tudo só em first_name, como o
+ * código fazia antes). Cliente com um nome só (raro, mas existe): repete o
+ * mesmo nome em last_name — não é ideal, mas evita bloquear a emissão do
+ * boleto por causa de um campo que a API só usa pra exibição no boleto, não
+ * pra validação de identidade (quem valida identidade é o CPF/CNPJ).
+ */
+function separarNome(nomeCompleto: string): { firstName: string; lastName: string } {
+  const partes = nomeCompleto.trim().split(/\s+/);
+  return {
+    firstName: partes[0],
+    lastName: partes.length > 1 ? partes.slice(1).join(" ") : partes[0],
+  };
+}
+
 type CriarCobrancaInput = {
   cobrancaId: string; // id interno (Cobranca.id) — vira external_reference para conciliação no webhook
   empresaId: string; // usado para montar o notification_url por tenant (ver criarLinkPagamentoCartao)
@@ -84,6 +102,7 @@ export async function criarBoleto(accessToken: string, input: CriarCobrancaInput
   if (!input.clienteDocumento) {
     throw new Error("Documento (CPF/CNPJ) do cliente é obrigatório para gerar boleto.");
   }
+  const { firstName, lastName } = separarNome(input.clienteNome);
 
   const res = await fetch(`${MP_API_URL}/v1/payments`, {
     method: "POST",
@@ -101,7 +120,8 @@ export async function criarBoleto(accessToken: string, input: CriarCobrancaInput
       notification_url: notificationUrl(input.empresaId),
       payer: {
         email: input.clienteEmail || "cliente@petshop.local",
-        first_name: input.clienteNome,
+        first_name: firstName,
+        last_name: lastName,
         identification: {
           type: input.clienteDocumento.replace(/\D/g, "").length > 11 ? "CNPJ" : "CPF",
           number: input.clienteDocumento.replace(/\D/g, ""),
