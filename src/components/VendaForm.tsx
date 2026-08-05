@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
 
-type Cliente = { id: string; nome: string };
+const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
+
+type Cliente = { id: string; nome: string; documento: string | null };
 type Animal = { id: string; nome: string; clienteId: string };
 type TipoCatalogo = "PRODUTO" | "SERVICO" | "MENSALIDADE";
 type ItemCatalogo = { id: string; tipo: TipoCatalogo; nome: string; preco: number };
@@ -55,6 +58,7 @@ export default function VendaForm({
   const [animalId, setAnimalId] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("DINHEIRO");
   const [assinaturaId, setAssinaturaId] = useState("");
+  const [formaCobrancaMensalidade, setFormaCobrancaMensalidade] = useState("PIX");
   const [itens, setItens] = useState<ItemCarrinho[]>([]);
   const [catalogoSelecionado, setCatalogoSelecionado] = useState("");
   const [quantidade, setQuantidade] = useState(1);
@@ -70,6 +74,7 @@ export default function VendaForm({
     [assinaturas, clienteId]
   );
   const clienteJaEhMensalista = assinaturasDoCliente.length > 0;
+  const clienteSelecionado = useMemo(() => clientes.find((c) => c.id === clienteId), [clientes, clienteId]);
   const carrinhoTemMensalidade = itens.some((i) => i.tipo === "MENSALIDADE");
 
   // Mensalidade não entra no total a pagar AGORA — vira Assinatura e a
@@ -135,6 +140,7 @@ export default function VendaForm({
               setClienteId(e.target.value);
               setAnimalId("");
               setAssinaturaId("");
+              setFormaCobrancaMensalidade("PIX");
             }}
             required
           >
@@ -260,10 +266,29 @@ export default function VendaForm({
         </table>
 
         {itemMensalidade && (
-          <p className="text-sm text-gray-500 mt-3">
-            "{itemMensalidade.nome}" assina o cliente à mensalidade — a primeira cobrança
-            ({formatCurrency(itemMensalidade.preco)}) entra na próxima fatura mensal, não nesta venda.
-          </p>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-gray-500">
+              "{itemMensalidade.nome}" assina o cliente à mensalidade — a primeira cobrança
+              ({formatCurrency(itemMensalidade.preco)}) entra na próxima fatura mensal, não nesta venda.
+            </p>
+            <div className="max-w-xs">
+              <label className="label" htmlFor="formaCobrancaMensalidade">Forma de cobrança da mensalidade</label>
+              <select
+                id="formaCobrancaMensalidade"
+                name="formaCobrancaMensalidade"
+                className="input"
+                value={formaCobrancaMensalidade}
+                onChange={(e) => setFormaCobrancaMensalidade(e.target.value)}
+              >
+                {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || clienteSelecionado?.documento).map((op) => (
+                  <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Usada todo mês nas próximas faturas — dá pra trocar pontualmente ao gerar uma fatura específica.
+              </p>
+            </div>
+          </div>
         )}
         <div className="text-right mt-3 font-semibold text-lg">Total a pagar agora: {formatCurrency(totalPagar)}</div>
       </div>

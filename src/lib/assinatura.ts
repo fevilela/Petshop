@@ -25,14 +25,30 @@ export async function criarAssinatura(params: {
   itemCatalogoId: string;
   valorMensal?: number;
   diaCobranca?: number;
+  /** Forma de cobrança padrão da fatura mensal (ver comentário no schema). Default PIX. */
+  formaCobranca?: "BOLETO" | "PIX" | "CARTAO_LINK";
 }) {
   const { prisma, empresaId, clienteId, itemCatalogoId } = params;
+  const formaCobranca = params.formaCobranca ?? "PIX";
 
   const itemCatalogo = await prisma.itemCatalogo.findFirstOrThrow({
     where: { id: itemCatalogoId, empresaId },
   });
   if (itemCatalogo.tipo !== "MENSALIDADE") {
     throw new Error(`"${itemCatalogo.nome}" não é uma mensalidade.`);
+  }
+
+  // Boleto exige CPF/CNPJ na API do Mercado Pago (mesma regra aplicada a
+  // vendas avulsas em vendas/actions.ts) — checar aqui, na criação da
+  // assinatura, evita que isso só quebre meses depois, na hora de gerar a
+  // fatura (pior ainda se for o cron, sem ninguém olhando pra tratar o erro).
+  if (formaCobranca === "BOLETO") {
+    const cliente = await prisma.cliente.findFirstOrThrow({ where: { id: clienteId, empresaId } });
+    if (!cliente.documento) {
+      throw new Error(
+        `Não é possível cobrar por boleto: ${cliente.nome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`
+      );
+    }
   }
 
   const jaAssina = await prisma.assinatura.findFirst({
@@ -52,6 +68,7 @@ export async function criarAssinatura(params: {
       itemCatalogoId,
       valorMensal: params.valorMensal ?? itemCatalogo.preco,
       diaCobranca: params.diaCobranca ?? itemCatalogo.diaCobrancaPadrao ?? 5,
+      formaCobranca,
     },
   });
 }

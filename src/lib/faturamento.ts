@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { criarPagamentoPix } from "@/lib/mercadopago";
+import { criarPagamentoPix, criarBoleto, criarLinkPagamentoCartao } from "@/lib/mercadopago";
 
 /**
  * Fatura mensal de um mensalista: mensalidade da Assinatura + soma das
@@ -30,6 +30,8 @@ export type PreviaFatura = {
   clienteTelefone: string;
   nomeMensalidade: string;
   valorMensalidade: number;
+  /** Forma de cobrança padrão da assinatura — pré-seleciona o campo na tela de gerar fatura (pode ser trocada só pra esse mês). */
+  formaCobranca: "BOLETO" | "PIX" | "CARTAO_LINK";
   vendasAvulsas: { id: string; numero: number; valorTotal: number; createdAt: Date }[];
   valorAvulsos: number;
   valorTotal: number;
@@ -76,6 +78,7 @@ export async function calcularPreviaFatura(
     clienteTelefone: assinatura.cliente.telefone,
     nomeMensalidade: assinatura.itemCatalogo.nome,
     valorMensalidade,
+    formaCobranca: assinatura.formaCobranca,
     vendasAvulsas: vendasAvulsas.map((v) => ({
       id: v.id,
       numero: v.numero,
@@ -97,14 +100,21 @@ type ResultadoGeracao =
 /**
  * Gera de verdade a fatura mensal: cria a Cobranca consolidada, marca as
  * vendas avulsas incluídas como já faturadas (`faturaCobrancaId`), e tenta
- * gerar o Pix via Mercado Pago (best-effort — se falhar, a fatura já existe
- * e pode ser cobrada/marcada como paga manualmente depois, igual a uma
- * venda avulsa qualquer quando o Mercado Pago não está configurado).
+ * gerar o Pix/boleto/link via Mercado Pago (best-effort — se falhar, a
+ * fatura já existe e pode ser cobrada/marcada como paga manualmente depois,
+ * igual a uma venda avulsa qualquer quando o Mercado Pago não está
+ * configurado).
+ *
+ * `formaCobrancaOverride`: por padrão usa `assinatura.formaCobranca` (o que
+ * o cron sempre faz, já que roda sem ninguém pra escolher nada). A tela de
+ * Faturamento mensal permite trocar pontualmente só pra esta fatura — isso
+ * NÃO altera a preferência salva na assinatura, vale só pra este mês.
  */
 export async function gerarFaturaMensal(
   empresaId: string,
   assinaturaId: string,
-  referenciaMes: string = referenciaMesAtual()
+  referenciaMes: string = referenciaMesAtual(),
+  formaCobrancaOverride?: "BOLETO" | "PIX" | "CARTAO_LINK"
 ): Promise<ResultadoGeracao> {
   const assinatura = await prisma.assinatura.findFirstOrThrow({
     where: { id: assinaturaId, empresaId },
@@ -118,6 +128,19 @@ export async function gerarFaturaMensal(
     return { ok: false, motivo: "Já existe fatura gerada para este mês.", cobrancaId: previa.cobrancaId ?? undefined };
   }
 
+  const formaCobranca = formaCobrancaOverride ?? assinatura.formaCobranca;
+
+  // Mesma regra aplicada na criação da assinatura (src/lib/assinatura.ts) e
+  // em vendas avulsas — repetida aqui porque o override pontual pode pedir
+  // Boleto mesmo numa assinatura cuja preferência salva é Pix (documento
+  // pode ter sido cadastrado depois, ou nunca).
+  if (formaCobranca === "BOLETO" && !previa.clienteDocumento) {
+    return {
+      ok: false,
+      motivo: `Não é possível cobrar por boleto: ${previa.clienteNome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`,
+    };
+  }
+
   const dataVencimento = new Date();
   dataVencimento.setDate(dataVencimento.getDate() + 3);
 
@@ -125,7 +148,7 @@ export async function gerarFaturaMensal(
     const c = await tx.cobranca.create({
       data: {
         empresaId,
-        tipo: "PIX",
+        tipo: formaCobranca,
         valor: previa.valorTotal,
         assinaturaId,
         referenciaMes,
@@ -152,7 +175,7 @@ export async function gerarFaturaMensal(
       throw new Error("Mercado Pago não configurado para esta empresa.");
     }
     const accessToken = decrypt(empresa.mercadoPagoAccessTokenEnc);
-    const pix = await criarPagamentoPix(accessToken, {
+    const input = {
       cobrancaId: cobranca.id,
       empresaId,
       valor: previa.valorTotal,
@@ -161,13 +184,29 @@ export async function gerarFaturaMensal(
       clienteEmail: previa.clienteEmail ?? undefined,
       clienteDocumento: previa.clienteDocumento ?? undefined,
       dataVencimento,
-    });
-    await prisma.cobranca.update({
-      where: { id: cobranca.id },
-      data: { mercadoPagoId: pix.mercadoPagoId, qrCode: pix.qrCode, qrCodeBase64: pix.qrCodeBase64 },
-    });
+    };
+
+    if (formaCobranca === "PIX") {
+      const pix = await criarPagamentoPix(accessToken, input);
+      await prisma.cobranca.update({
+        where: { id: cobranca.id },
+        data: { mercadoPagoId: pix.mercadoPagoId, qrCode: pix.qrCode, qrCodeBase64: pix.qrCodeBase64 },
+      });
+    } else if (formaCobranca === "BOLETO") {
+      const boleto = await criarBoleto(accessToken, input);
+      await prisma.cobranca.update({
+        where: { id: cobranca.id },
+        data: { mercadoPagoId: boleto.mercadoPagoId, linkPagamento: boleto.linkPagamento, linhaDigitavel: boleto.linhaDigitavel },
+      });
+    } else {
+      const link = await criarLinkPagamentoCartao(accessToken, input);
+      await prisma.cobranca.update({
+        where: { id: cobranca.id },
+        data: { mercadoPagoId: link.mercadoPagoId, linkPagamento: link.linkPagamento },
+      });
+    }
   } catch (err) {
-    console.error(`[faturamento] Falha ao gerar Pix da fatura ${cobranca.id} (empresa ${empresaId}):`, err);
+    console.error(`[faturamento] Falha ao gerar cobrança da fatura ${cobranca.id} (empresa ${empresaId}):`, err);
   }
 
   return { ok: true, cobrancaId: cobranca.id };

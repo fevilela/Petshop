@@ -34,16 +34,27 @@ function parseForm(formData: FormData) {
  * formulário (cliente comum, ou já é mensalista e o form mostrou o card de
  * assinatura ativa em vez do checkbox).
  */
-function lerAssinaturaDoForm(formData: FormData) {
+function lerAssinaturaDoForm(formData: FormData): {
+  itemCatalogoId: string;
+  valorMensal?: number;
+  diaCobranca?: number;
+  formaCobranca?: "BOLETO" | "PIX" | "CARTAO_LINK";
+} | undefined {
   if (formData.get("mensalista") !== "on") return undefined;
   const itemCatalogoId = formData.get("itemCatalogoId");
   if (!itemCatalogoId || typeof itemCatalogoId !== "string") return undefined;
   const valorMensal = formData.get("valorMensal");
   const diaCobranca = formData.get("diaCobranca");
+  const formaCobrancaRaw = formData.get("formaCobranca");
+  const formaCobranca =
+    formaCobrancaRaw === "BOLETO" || formaCobrancaRaw === "PIX" || formaCobrancaRaw === "CARTAO_LINK"
+      ? formaCobrancaRaw
+      : undefined;
   return {
     itemCatalogoId,
     valorMensal: valorMensal ? Number(valorMensal) : undefined,
     diaCobranca: diaCobranca ? Number(diaCobranca) : undefined,
+    formaCobranca,
   };
 }
 

@@ -322,6 +322,14 @@ model Assinatura {
   itemCatalogo   ItemCatalogo     @relation(fields: [itemCatalogoId], references: [id])
   valorMensal    Decimal          @db.Decimal(10, 2) // copiado do catálogo na criação, pode ser customizado
   diaCobranca    Int
+  // Forma de cobrança PADRÃO desta assinatura — precisa estar guardada aqui
+  // (não só escolhida na hora) porque a fatura mensal também é gerada
+  // sozinha pelo cron, sem ninguém pra perguntar. Pode ser sobrescrita
+  // pontualmente ao gerar uma fatura específica manualmente (ver
+  // gerarFaturaMensal em src/lib/faturamento.ts) — isso NÃO altera este
+  // campo, só vale pra aquela fatura. BOLETO exige Cliente.documento
+  // (validado na criação da assinatura, ver src/lib/assinatura.ts).
+  formaCobranca  TipoCobranca     @default(PIX)
   status         StatusAssinatura @default(ATIVA)
   dataInicio     DateTime         @default(now())
   dataFim        DateTime?

@@ -5,7 +5,7 @@ import { createVenda } from "../actions";
 export default async function NovaVendaPage() {
   const { prisma } = await getSessionTenantPrisma();
   const [clientes, animais, catalogo, assinaturas] = await Promise.all([
-    prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.cliente.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, documento: true } }),
     prisma.animal.findMany({ where: { ativo: true }, select: { id: true, nome: true, clienteId: true } }),
     prisma.itemCatalogo.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
     prisma.assinatura.findMany({

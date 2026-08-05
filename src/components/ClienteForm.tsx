@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
+
+const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
 
 type Mensalidade = { id: string; nome: string; preco: number; diaCobrancaPadrao: number | null };
-type AssinaturaAtiva = { id: string; nomeMensalidade: string; valorMensal: number; diaCobranca: number };
+type AssinaturaAtiva = {
+  id: string;
+  nomeMensalidade: string;
+  valorMensal: number;
+  diaCobranca: number;
+  formaCobranca: string;
+};
 
 type Props = {
   action: (formData: FormData) => Promise<void>;
@@ -83,7 +92,8 @@ export default function ClienteForm({
           <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 flex items-center justify-between flex-wrap gap-2">
             <p className="text-sm text-gray-700">
               Assina <strong>{assinaturaAtiva.nomeMensalidade}</strong> ·{" "}
-              {formatCurrency(assinaturaAtiva.valorMensal)}/mês · cobrança dia {assinaturaAtiva.diaCobranca}
+              {formatCurrency(assinaturaAtiva.valorMensal)}/mês · cobrança dia {assinaturaAtiva.diaCobranca} ·{" "}
+              {TIPO_COBRANCA_LABEL[assinaturaAtiva.formaCobranca] ?? assinaturaAtiva.formaCobranca}
             </p>
             {cancelarAssinaturaAction && (
               <form action={cancelarAssinaturaAction}>
@@ -148,6 +158,19 @@ export default function ClienteForm({
                     className="input"
                     placeholder={mensalidadeEscolhida?.diaCobrancaPadrao ? String(mensalidadeEscolhida.diaCobrancaPadrao) : "5"}
                   />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="label" htmlFor="formaCobranca">Forma de cobrança da fatura mensal</label>
+                  <select id="formaCobranca" name="formaCobranca" className="input" defaultValue="PIX">
+                    <option value="PIX">Pix</option>
+                    <option value="BOLETO" disabled={!defaultValues?.documento}>
+                      Boleto{!defaultValues?.documento ? " (precisa de CPF/CNPJ cadastrado)" : ""}
+                    </option>
+                    <option value="CARTAO_LINK">Link de pagamento</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Usada todo mês, inclusive na geração automática — dá pra trocar pontualmente ao gerar uma fatura específica.
+                  </p>
                 </div>
               </div>
             )}

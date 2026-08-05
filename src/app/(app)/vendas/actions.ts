@@ -62,6 +62,14 @@ export async function createVenda(formData: FormData) {
 
   const itensInput = z.array(itemSchema).min(1, "Adicione ao menos um item").parse(JSON.parse(parsed.itensJson));
 
+  const formaCobrancaMensalidadeRaw = formData.get("formaCobrancaMensalidade");
+  const formaCobrancaMensalidade =
+    formaCobrancaMensalidadeRaw === "BOLETO" ||
+    formaCobrancaMensalidadeRaw === "PIX" ||
+    formaCobrancaMensalidadeRaw === "CARTAO_LINK"
+      ? formaCobrancaMensalidadeRaw
+      : undefined;
+
   if (FORMAS_QUE_EXIGEM_ASSINATURA.has(parsed.formaPagamento) && !parsed.assinaturaId) {
     throw new Error("Selecione a assinatura do cliente.");
   }
@@ -168,6 +176,7 @@ export async function createVenda(formData: FormData) {
           empresaId,
           clienteId: parsed.clienteId,
           itemCatalogoId: item.itemCatalogoId,
+          formaCobranca: formaCobrancaMensalidade,
         });
       }
     }

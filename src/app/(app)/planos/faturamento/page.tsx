@@ -2,7 +2,10 @@ import Link from "next/link";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency } from "@/lib/utils";
 import { calcularPreviaFatura, referenciaMesAtual } from "@/lib/faturamento";
+import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
 import { gerarFaturaAction } from "./actions";
+
+const OPCOES_COBRANCA: ("PIX" | "BOLETO" | "CARTAO_LINK")[] = ["PIX", "BOLETO", "CARTAO_LINK"];
 
 export default async function FaturamentoPage() {
   const { prisma, empresaId } = await getSessionTenantPrisma();
@@ -68,8 +71,18 @@ export default async function FaturamentoPage() {
                       Ver
                     </Link>
                   ) : (
-                    <form action={gerarFaturaAction.bind(null, p.assinaturaId)}>
-                      <button type="submit" className="text-sm text-brand-700 hover:underline">Gerar fatura</button>
+                    <form action={gerarFaturaAction.bind(null, p.assinaturaId)} className="flex items-center justify-end gap-2">
+                      <select
+                        name="formaCobranca"
+                        defaultValue={p.formaCobranca}
+                        className="input text-xs py-1"
+                        title="Forma de cobrança desta fatura (não altera a preferência salva na assinatura)"
+                      >
+                        {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || p.clienteDocumento).map((op) => (
+                          <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
+                        ))}
+                      </select>
+                      <button type="submit" className="text-sm text-brand-700 hover:underline whitespace-nowrap">Gerar fatura</button>
                     </form>
                   )}
                 </td>

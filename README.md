@@ -113,6 +113,16 @@ como qualquer mês seguinte). Regra: só uma assinatura ativa por cliente por
 vez (`src/lib/assinatura.ts`) — trocar de mensalidade é cancelar a atual e
 assinar de novo.
 
+**Forma de cobrança da fatura (Pix/Boleto/Link de pagamento):** guardada em
+`Assinatura.formaCobranca` (default Pix), escolhida no mesmo lugar em que a
+assinatura é criada — precisa estar salva ali porque o cron gera a fatura
+sozinho, sem ninguém pra escolher nada na hora. Dá pra sobrescrever
+pontualmente ao gerar uma fatura específica manualmente em
+`/planos/faturamento` (não altera a preferência salva, vale só pra aquele
+mês). Boleto exige `Cliente.documento` — validado tanto na criação da
+assinatura quanto no momento de gerar a fatura (o override pode pedir
+Boleto numa assinatura cuja preferência salva é Pix).
+
 Na tela de Vendas, um mensalista pode comprar algo extra durante o mês e
 escolher a forma de pagamento "Mensalista (cobra na fatura mensal)"
 (`A_FATURAR` no banco): a venda fica pendente até entrar numa fatura

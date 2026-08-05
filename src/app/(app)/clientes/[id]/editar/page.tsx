@@ -32,6 +32,7 @@ export default async function EditarClientePage({ params }: { params: { id: stri
                 nomeMensalidade: assinaturaAtiva.itemCatalogo.nome,
                 valorMensal: Number(assinaturaAtiva.valorMensal),
                 diaCobranca: assinaturaAtiva.diaCobranca,
+                formaCobranca: assinaturaAtiva.formaCobranca,
               }
             : null
         }

@@ -6,10 +6,18 @@ import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { gerarFaturaMensal, referenciaMesAtual } from "@/lib/faturamento";
 import { verificarPagamentoCobranca, marcarCobrancaNotificada } from "@/lib/cobranca";
 
-/** Gera (ou, se já existir, só abre) a fatura do mês corrente pra uma assinatura. */
-export async function gerarFaturaAction(assinaturaId: string) {
+/**
+ * Gera (ou, se já existir, só abre) a fatura do mês corrente pra uma
+ * assinatura. `formaCobranca` no form é opcional: se o atendente não trocar
+ * o select (ver /planos/faturamento/page.tsx), usa a preferência salva na
+ * própria assinatura — mesmo default que o cron usa.
+ */
+export async function gerarFaturaAction(assinaturaId: string, formData: FormData) {
   const { empresaId } = await getSessionTenantPrisma();
-  const resultado = await gerarFaturaMensal(empresaId, assinaturaId, referenciaMesAtual());
+  const formaCobranca = formData.get("formaCobranca");
+  const override = formaCobranca === "BOLETO" || formaCobranca === "PIX" || formaCobranca === "CARTAO_LINK" ? formaCobranca : undefined;
+
+  const resultado = await gerarFaturaMensal(empresaId, assinaturaId, referenciaMesAtual(), override);
   revalidatePath("/planos/faturamento");
   if (resultado.cobrancaId) {
     redirect(`/planos/faturamento/${resultado.cobrancaId}`);

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { TIPO_COBRANCA_LABEL } from "@/lib/cobranca-labels";
 import DeleteButton from "@/components/DeleteButton";
 import { cancelarAssinatura } from "../actions";
 
@@ -50,7 +51,11 @@ export default async function PlanoDetalhePage({ params }: { params: { id: strin
             <li key={a.id} className="py-2 flex items-center justify-between text-sm">
               <span>
                 {a.cliente.nome}
-                <span className="text-gray-400"> · desde {formatDate(a.dataInicio)} · dia {a.diaCobranca}</span>
+                <span className="text-gray-400">
+                  {" "}
+                  · desde {formatDate(a.dataInicio)} · dia {a.diaCobranca} ·{" "}
+                  {TIPO_COBRANCA_LABEL[a.formaCobranca] ?? a.formaCobranca}
+                </span>
                 {a.status !== "ATIVA" && <span className="badge bg-gray-100 text-gray-500 ml-2">{a.status}</span>}
               </span>
               {a.status === "ATIVA" && (
