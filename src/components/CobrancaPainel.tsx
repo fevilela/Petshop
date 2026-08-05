@@ -1,4 +1,5 @@
 import CopyButton from "@/components/CopyButton";
+import SelectableField from "@/components/SelectableField";
 import AbrirWhatsAppButton from "@/components/AbrirWhatsAppButton";
 import { formatCurrency, formatDateTime, linkWhatsapp } from "@/lib/utils";
 import { COBRANCA_BADGE, TIPO_COBRANCA_LABEL, mensagemCobrancaWhatsapp } from "@/lib/cobranca-labels";
@@ -89,13 +90,7 @@ export default function CobrancaPainel({
             />
           )}
           <div className="flex items-start gap-2">
-            <textarea
-              readOnly
-              value={cobranca.qrCode}
-              rows={3}
-              className="input text-xs font-mono flex-1"
-              onFocus={(e) => e.currentTarget.select()}
-            />
+            <SelectableField value={cobranca.qrCode} multiline className="input text-xs font-mono flex-1" />
             <CopyButton value={cobranca.qrCode} label="Copiar código" />
           </div>
         </div>
@@ -105,12 +100,7 @@ export default function CobrancaPainel({
         <div className="border-t pt-4 space-y-2">
           <p className="text-sm font-medium text-gray-900">Linha digitável</p>
           <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={cobranca.linhaDigitavel}
-              className="input text-xs font-mono flex-1"
-              onFocus={(e) => e.currentTarget.select()}
-            />
+            <SelectableField value={cobranca.linhaDigitavel} className="input text-xs font-mono flex-1" />
             <CopyButton value={cobranca.linhaDigitavel} />
           </div>
           {cobranca.linkPagamento && (
@@ -130,12 +120,7 @@ export default function CobrancaPainel({
         <div className="border-t pt-4 space-y-2">
           <p className="text-sm font-medium text-gray-900">Link de pagamento</p>
           <div className="flex items-center gap-2">
-            <input
-              readOnly
-              value={cobranca.linkPagamento}
-              className="input text-xs flex-1"
-              onFocus={(e) => e.currentTarget.select()}
-            />
+            <SelectableField value={cobranca.linkPagamento} className="input text-xs flex-1" />
             <CopyButton value={cobranca.linkPagamento} />
           </div>
           <a
