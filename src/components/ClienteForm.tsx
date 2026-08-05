@@ -35,6 +35,8 @@ type Props = {
    */
   assinaturaAtiva?: AssinaturaAtiva | null;
   cancelarAssinaturaAction?: (formData: FormData) => Promise<void>;
+  /** Troca a forma de cobrança PADRÃO da assinatura ativa (não é o override pontual de uma fatura — ver /planos/actions.ts). */
+  atualizarFormaCobrancaAction?: (formData: FormData) => Promise<void>;
 };
 
 export default function ClienteForm({
@@ -43,6 +45,7 @@ export default function ClienteForm({
   mensalidades,
   assinaturaAtiva,
   cancelarAssinaturaAction,
+  atualizarFormaCobrancaAction,
 }: Props) {
   const [mensalista, setMensalista] = useState(false);
   const [itemCatalogoId, setItemCatalogoId] = useState("");
@@ -89,15 +92,32 @@ export default function ClienteForm({
         <h2 className="font-medium text-gray-900 mb-2">Mensalista</h2>
 
         {assinaturaAtiva ? (
-          <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 flex items-center justify-between flex-wrap gap-2">
-            <p className="text-sm text-gray-700">
-              Assina <strong>{assinaturaAtiva.nomeMensalidade}</strong> ·{" "}
-              {formatCurrency(assinaturaAtiva.valorMensal)}/mês · cobrança dia {assinaturaAtiva.diaCobranca} ·{" "}
-              {TIPO_COBRANCA_LABEL[assinaturaAtiva.formaCobranca] ?? assinaturaAtiva.formaCobranca}
-            </p>
-            {cancelarAssinaturaAction && (
-              <form action={cancelarAssinaturaAction}>
-                <button type="submit" className="text-sm text-red-600 hover:underline">Cancelar assinatura</button>
+          <div className="bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-sm text-gray-700">
+                Assina <strong>{assinaturaAtiva.nomeMensalidade}</strong> ·{" "}
+                {formatCurrency(assinaturaAtiva.valorMensal)}/mês · cobrança dia {assinaturaAtiva.diaCobranca}
+              </p>
+              {cancelarAssinaturaAction && (
+                <form action={cancelarAssinaturaAction}>
+                  <button type="submit" className="text-sm text-red-600 hover:underline">Cancelar assinatura</button>
+                </form>
+              )}
+            </div>
+            {atualizarFormaCobrancaAction && (
+              <form action={atualizarFormaCobrancaAction} className="flex items-center gap-2">
+                <label className="text-xs text-gray-500" htmlFor="formaCobrancaAtual">Forma de cobrança:</label>
+                <select
+                  id="formaCobrancaAtual"
+                  name="formaCobranca"
+                  className="input text-xs py-1 w-auto"
+                  defaultValue={assinaturaAtiva.formaCobranca}
+                >
+                  {OPCOES_COBRANCA.filter((op) => op !== "BOLETO" || defaultValues?.documento).map((op) => (
+                    <option key={op} value={op}>{TIPO_COBRANCA_LABEL[op]}</option>
+                  ))}
+                </select>
+                <button type="submit" className="text-xs text-brand-700 hover:underline">Salvar</button>
               </form>
             )}
           </div>

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getSessionTenantPrisma } from "@/lib/session-tenant";
 import ClienteForm from "@/components/ClienteForm";
 import { updateCliente } from "../../actions";
-import { cancelarAssinatura } from "../../../planos/actions";
+import { cancelarAssinatura, atualizarFormaCobranca } from "../../../planos/actions";
 
 export default async function EditarClientePage({ params }: { params: { id: string } }) {
   const { prisma } = await getSessionTenantPrisma();
@@ -37,6 +37,7 @@ export default async function EditarClientePage({ params }: { params: { id: stri
             : null
         }
         cancelarAssinaturaAction={assinaturaAtiva ? cancelarAssinatura.bind(null, assinaturaAtiva.id) : undefined}
+        atualizarFormaCobrancaAction={assinaturaAtiva ? atualizarFormaCobranca.bind(null, assinaturaAtiva.id) : undefined}
       />
     </div>
   );

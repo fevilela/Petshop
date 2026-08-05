@@ -50,7 +50,13 @@ export default async function PlanoDetalhePage({ params }: { params: { id: strin
           {mensalidade.assinaturas.map((a) => (
             <li key={a.id} className="py-2 flex items-center justify-between text-sm">
               <span>
-                {a.cliente.nome}
+                {a.status === "ATIVA" ? (
+                  <Link href={`/clientes/${a.clienteId}/editar`} className="text-brand-700 hover:underline">
+                    {a.cliente.nome}
+                  </Link>
+                ) : (
+                  a.cliente.nome
+                )}
                 <span className="text-gray-400">
                   {" "}
                   · desde {formatDate(a.dataInicio)} · dia {a.diaCobranca} ·{" "}

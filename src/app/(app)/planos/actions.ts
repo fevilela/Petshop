@@ -21,3 +21,34 @@ export async function cancelarAssinatura(assinaturaId: string) {
   revalidatePath(`/clientes/${assinatura.clienteId}`);
   revalidatePath(`/clientes/${assinatura.clienteId}/editar`);
 }
+
+/**
+ * Troca a forma de cobrança PADRÃO de uma assinatura já existente (ver
+ * comentário em Assinatura.formaCobranca no schema) — chamado a partir do
+ * cadastro do cliente. Diferente do override feito ao gerar uma fatura
+ * específica em /planos/faturamento (aquele vale só pra um mês, este muda o
+ * que o cron vai usar dali em diante).
+ */
+export async function atualizarFormaCobranca(assinaturaId: string, formData: FormData) {
+  const { prisma, empresaId } = await getSessionTenantPrisma();
+  const formaCobranca = formData.get("formaCobranca");
+  if (formaCobranca !== "BOLETO" && formaCobranca !== "PIX" && formaCobranca !== "CARTAO_LINK") {
+    throw new Error("Forma de cobrança inválida.");
+  }
+
+  const assinatura = await prisma.assinatura.findFirstOrThrow({
+    where: { id: assinaturaId, empresaId },
+    include: { cliente: true },
+  });
+
+  if (formaCobranca === "BOLETO" && !assinatura.cliente.documento) {
+    throw new Error(
+      `Não é possível cobrar por boleto: ${assinatura.cliente.nome} não tem CPF/CNPJ cadastrado. Edite o cliente ou escolha Pix/Link de pagamento.`
+    );
+  }
+
+  await prisma.assinatura.update({ where: { id: assinaturaId }, data: { formaCobranca } });
+  revalidatePath(`/planos/${assinatura.itemCatalogoId}`);
+  revalidatePath(`/clientes/${assinatura.clienteId}`);
+  revalidatePath(`/clientes/${assinatura.clienteId}/editar`);
+}
